@@ -9,7 +9,8 @@ from typing import Tuple, List
 # CONFIGURATION & CONSTANTS
 # ==========================================
 # --- Paths & File Structure ---
-BASE_DIR = os.path.join('data', 'sequences', '00')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), 'dataset', 'sequences', '00')
 LEFT_IMG_DIR = 'image_0'
 RIGHT_IMG_DIR = 'image_1'
 IMG_FILENAME_FORMAT = '{:06d}.png'
