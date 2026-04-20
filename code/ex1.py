@@ -17,8 +17,8 @@ IMG_FILENAME_FORMAT = '{:06d}.png'
 FRAME_INDEX = 0
 
 # --- Algorithm Parameters ---
-NUM_FEATURES = 500
-RATIO_THRESHOLD = 0.75
+NUM_FEATURES = 1000
+RATIO_THRESHOLD = 0.7
 KNN_NEIGHBORS = 2
 
 # --- Visualization Parameters ---
