@@ -5,12 +5,12 @@ import random
 from typing import Tuple, List
 
 from utils.features import extract_features
+from utils.matching import match_features
 from utils.image_loader import read_images
 
 # --- Algorithm Parameters ---
 NUM_FEATURES = 1000
 RATIO_THRESHOLD = 0.7
-KNN_NEIGHBORS = 2
 
 # --- Visualization Parameters ---
 FRAME_INDEX = 0
@@ -46,16 +46,6 @@ def print_first_descriptors(des1: np.ndarray, num_to_print: int = NUM_DESCRIPTOR
     print(f"\n1.2: Descriptors of the first {num_to_print} features (Left Image):")
     for i in range(min(num_to_print, len(des1))):
         print(f"Descriptor {i + 1}:\n{des1[i]}")
-
-
-# ==========================================
-# PART 1.3: Match Descriptors
-# ==========================================
-def match_features_knn(des1: np.ndarray, des2: np.ndarray, k: int = KNN_NEIGHBORS):
-    """LOGIC: Finds the k-nearest neighbors for each descriptor."""
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-    knn_matches = bf.knnMatch(des1, des2, k=k)
-    return knn_matches
 
 
 def vis_matches(img1, kp1, img2, kp2, matches: list, num_to_draw: int = NUM_MATCHES_TO_DRAW, title: str = ""):
@@ -160,7 +150,7 @@ def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple
         print_first_descriptors(des1)
 
     # --- Execute 1.3 ---
-    knn_matches = match_features_knn(des1, des2)
+    knn_matches = match_features(des1, des2)
 
     if visualize:
         raw_matches_13 = [m[0] for m in knn_matches]
