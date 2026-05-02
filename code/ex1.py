@@ -5,16 +5,7 @@ import matplotlib.pyplot as plt
 import random
 from typing import Tuple, List
 
-# ==========================================
-# CONFIGURATION & CONSTANTS
-# ==========================================
-# --- Paths & File Structure ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), 'dataset', 'sequences', '00')
-LEFT_IMG_DIR = 'image_0'
-RIGHT_IMG_DIR = 'image_1'
-IMG_FILENAME_FORMAT = '{:06d}.png'
-FRAME_INDEX = 0
+from utils.image_loader import read_images
 
 # --- Algorithm Parameters ---
 NUM_FEATURES = 1000
@@ -22,32 +13,14 @@ RATIO_THRESHOLD = 0.7
 KNN_NEIGHBORS = 2
 
 # --- Visualization Parameters ---
+FRAME_INDEX = 0
 RANDOM_SEED = 42
 NUM_MATCHES_TO_DRAW = 20
 NUM_DESCRIPTORS_TO_PRINT = 2
 DOT_RADIUS = 15  # Increased size for better visibility
 COLOR_KP = (0, 255, 0)  # Green (for keypoints)
 COLOR_DOT = (0, 0, 255)  # Red in BGR (for single match highlight)
-FIG_SIZE = (15, 5)  # Matplotlib figure dimensions
-
-
-# ==========================================
-# PART 0: Setup and Data Loading
-# ==========================================
-def read_images(idx: int = FRAME_INDEX):
-    """Loads the stereo pair for a given index using pinned path formats."""
-    img_name = IMG_FILENAME_FORMAT.format(idx)
-
-    left_path = os.path.join(BASE_DIR, LEFT_IMG_DIR, img_name)
-    right_path = os.path.join(BASE_DIR, RIGHT_IMG_DIR, img_name)
-
-    img1 = cv2.imread(left_path, cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(right_path, cv2.IMREAD_GRAYSCALE)
-
-    if img1 is None or img2 is None:
-        raise FileNotFoundError(f"Could not read images. Check paths:\n{left_path}\n{right_path}")
-
-    return img1, img2
+FIG_SIZE = (10, 8)  # Matplotlib figure dimensions
 
 
 # ==========================================
@@ -229,9 +202,6 @@ def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple
     return kp1, des1, kp2, des2, good_matches
 
 
-# ==========================================
-# EXECUTION ENTRY POINT
-# ==========================================
 if __name__ == "__main__":
     final_kp1, final_des1, final_kp2, final_des2, final_matches = find_features(FRAME_INDEX, visualize=True)
-    print("\nPipeline execution complete.")
+    print("Pipeline execution complete.")
