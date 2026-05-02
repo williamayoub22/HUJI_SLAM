@@ -1,16 +1,19 @@
-from typing import Tuple
 
 import cv2
 import os
 import numpy as np
 
+from typing import Tuple
+from pathlib import Path
+
 FRAME_INDEX = 0
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(SCRIPT_DIR)), 'dataset', 'sequences', '00')
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent.parent / "dataset" / "sequences" / "00"
 LEFT_IMG_DIR = 'image_0'
 RIGHT_IMG_DIR = 'image_1'
 IMG_FILENAME_FORMAT = '{:06d}.png'
+
 
 def read_images(idx: int = FRAME_INDEX) -> Tuple[np.ndarray, np.ndarray]:
     """Loads the stereo pair for a given index using pinned path formats."""
