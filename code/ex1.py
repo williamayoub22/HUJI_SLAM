@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import random
 from typing import Tuple, List
 
+from utils.features import extract_features
 from utils.image_loader import read_images
 
 # --- Algorithm Parameters ---
@@ -21,16 +22,6 @@ DOT_RADIUS = 15  # Increased size for better visibility
 COLOR_KP = (0, 255, 0)  # Green (for keypoints)
 COLOR_DOT = (0, 0, 255)  # Red in BGR (for single match highlight)
 FIG_SIZE = (10, 8)  # Matplotlib figure dimensions
-
-
-# ==========================================
-# PART 1.1: Detect and Extract Key-points
-# ==========================================
-def extract_features(img: np.ndarray, num_features: int = NUM_FEATURES):
-    """LOGIC: Detects keypoints and extracts descriptors using SIFT."""
-    sift = cv2.SIFT_create(nfeatures=num_features)
-    keypoints, descriptors = sift.detectAndCompute(img, None)
-    return keypoints, descriptors
 
 
 def vis_keypoints(img1: np.ndarray, img2: np.ndarray, kp1: list, kp2: list):
