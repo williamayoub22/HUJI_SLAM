@@ -7,16 +7,11 @@ from utils.features import extract_features
 from utils.matching import match_features
 from utils.image_loader import read_images
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
+
 FRAME_INDEX = 0
 VERTICAL_DEVIATION_THRESHOLD = 2.0
 
 
-# ==========================================
-# GEOMETRY HELPERS
-# ==========================================
 def get_matched_points(
     kp_left: List[cv2.KeyPoint],
     kp_right: List[cv2.KeyPoint],
