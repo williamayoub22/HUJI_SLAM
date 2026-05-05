@@ -33,6 +33,10 @@ def compute_vertical_deviations(
     kp_right: List[cv2.KeyPoint],
     matches: List[cv2.DMatch],
 ) -> np.ndarray:
+    """
+    Returns an array of absolute difference (deviations) between the y values of the matched points
+    in the left and right image.
+    """
     left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
 
     y_left = left_pts[:, 1]
