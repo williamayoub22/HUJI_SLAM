@@ -224,14 +224,34 @@ def section_2_3(data_dict: dict, threshold: float = VERTICAL_DEVIATION_THRESHOLD
 
     # 3. Custom Triangulation (DLT)
     custom_3d_points = triangulate_dlt_custom(P1, P2, pts1_inliers, pts2_inliers)
-    plot_3d_point_cloud(custom_3d_points, "Custom DLT Triangulation Point Cloud")
 
     # 4. OpenCV Triangulation
     cv_4d_points = cv2.triangulatePoints(P1, P2, pts1_inliers.T, pts2_inliers.T)
     cv_3d_points = (cv_4d_points[:3, :] / cv_4d_points[3, :]).T
-    plot_3d_point_cloud(cv_3d_points, "OpenCV Triangulation Point Cloud")
 
-    # 5. Compare Results
+    # 5. Plot Side-by-Side on a single figure
+    fig = plt.figure(figsize=(16, 7))
+
+    ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+    ax1.scatter(custom_3d_points[:, 0], custom_3d_points[:, 1], custom_3d_points[:, 2], s=10, c='tab:blue', alpha=0.6)
+    ax1.set_xlabel('X')
+    ax1.set_ylabel('Y')
+    ax1.set_zlabel('Z')
+    ax1.set_title("Custom DLT Triangulation")
+    ax1.view_init(elev=-70, azim=-90)
+
+    ax2 = fig.add_subplot(1, 2, 2, projection='3d')
+    ax2.scatter(cv_3d_points[:, 0], cv_3d_points[:, 1], cv_3d_points[:, 2], s=10, c='tab:orange', alpha=0.6)
+    ax2.set_xlabel('X')
+    ax2.set_ylabel('Y')
+    ax2.set_zlabel('Z')
+    ax2.set_title("OpenCV Triangulation")
+    ax2.view_init(elev=-70, azim=-90)
+
+    plt.tight_layout()
+    plt.show()
+
+    # 6. Compare Results
     distances = np.linalg.norm(custom_3d_points - cv_3d_points, axis=1)
     median_distance = np.median(distances)
 
@@ -239,12 +259,15 @@ def section_2_3(data_dict: dict, threshold: float = VERTICAL_DEVIATION_THRESHOLD
     print(f"Median distance between Custom and OpenCV 3D points: {median_distance:.4e}\n")
 
 
-def section_2_4(frames_to_test: List[int] = [0, 1, 2], vertical_threshold: float = VERTICAL_DEVIATION_THRESHOLD):
+def section_2_4(frames_to_test: List[int] = [0, 1, 2, 3], threshold: float = VERTICAL_DEVIATION_THRESHOLD):
     print(f"--- Section 2.4: Processing Multiple Frames ---")
 
     P1, P2 = read_calib()
 
-    for frame_idx in frames_to_test:
+    # Create a single figure sized for a 2x2 grid
+    fig = plt.figure(figsize=(16, 14))
+
+    for idx, frame_idx in enumerate(frames_to_test[:4]):  # Ensure max 4 frames
         print(f"\nProcessing Frame {frame_idx}...")
 
         left_img, right_img = read_images(frame_idx)
@@ -256,7 +279,7 @@ def section_2_4(frames_to_test: List[int] = [0, 1, 2], vertical_threshold: float
 
         left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
         deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
-        inlier_mask = deviations <= vertical_threshold
+        inlier_mask = deviations <= threshold
 
         pts1_inliers = left_pts[inlier_mask]
         pts2_inliers = right_pts[inlier_mask]
@@ -264,24 +287,33 @@ def section_2_4(frames_to_test: List[int] = [0, 1, 2], vertical_threshold: float
         cv_4d_points = cv2.triangulatePoints(P1, P2, pts1_inliers.T, pts2_inliers.T)
         points_3d = (cv_4d_points[:3, :] / cv_4d_points[3, :]).T
 
-        # Outlier criterion: Depth must be in front of the camera (Z > 0) and not infinitely far (Z < 150)
-        z_coords = points_3d[:, 2]
-        valid_depth_mask = (z_coords > 0) & (z_coords < 150)
+        print(f"Number of triangulated points: {len(points_3d)}")
 
-        cleaned_points_3d = points_3d[valid_depth_mask]
+        # Add a 3D subplot for this frame, arranged in a 2x2 grid
+        ax = fig.add_subplot(2, 2, idx + 1, projection='3d')
 
-        print(f"Original matched points: {len(matches)}")
-        print(f"Points after vertical filter: {len(pts1_inliers)}")
-        print(f"Points after depth filter: {len(cleaned_points_3d)}")
+        xs = points_3d[:, 0]
+        ys = points_3d[:, 1]
+        zs = points_3d[:, 2]
 
-        plot_3d_point_cloud(cleaned_points_3d, f"Cleaned Point Cloud (Frame {frame_idx})")
+        ax.scatter(xs, ys, zs, s=10, c='tab:blue', alpha=0.6)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(f"Triangulation Point Cloud (Frame {frame_idx})")
+        ax.view_init(elev=-70, azim=-90)
+
+    # Automatically adjust subplot parameters to remove extra padding space
+    plt.tight_layout()
+    plt.show()
 
 
 def main():
     data_dict = section_2_1()
     section_2_2(data_dict)
     section_2_3(data_dict)
-    section_2_4([0, 1, 2])
+    section_2_4([0, 1, 2, 3])
 
 
 if __name__ == "__main__":
