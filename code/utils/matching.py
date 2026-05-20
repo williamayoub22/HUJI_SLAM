@@ -2,7 +2,10 @@
 import cv2
 import numpy as np
 
-from typing import Sequence, List, Tuple
+from typing import Sequence, List, Tuple, Any
+
+from utils.features import extract_features
+from cv2 import DMatch
 
 KNN_NEIGHBORS = 2
 
@@ -29,3 +32,14 @@ def get_matched_points(
     right_pts = np.array([kp_right[m.trainIdx].pt for m in matches])
 
     return left_pts, right_pts
+
+def extract_and_match_features(
+    im1: np.ndarray,
+    im2: np.ndarray,
+) -> tuple[Any, Any, Sequence[Sequence[DMatch]]]:
+    """Extracts local features from two images and matches their descriptors."""
+    kp1, desc1 = extract_features(im1)
+    kp2, desc2 = extract_features(im2)
+    matches = match_features(desc1, desc2)
+    return kp1, kp2, matches
+

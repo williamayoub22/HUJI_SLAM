@@ -6,8 +6,7 @@ import numpy as np
 from typing import Tuple
 from pathlib import Path
 
-from utils.features import extract_features
-from utils.matching import match_features
+from utils.matching import extract_and_match_features
 
 FRAME_INDEX = 0
 
@@ -44,9 +43,7 @@ def load_matches_between_images(frame_idx):
         matches: Best feature matches between the images.
     """
     left_img, right_img = read_images(frame_idx)
-    kp_left, des_left = extract_features(left_img)
-    kp_right, des_right = extract_features(right_img)
-    knn_matches = match_features(des_left, des_right)
+    kp_left, kp_right, knn_matches = extract_and_match_features(left_img, right_img)
     matches = [m[0] for m in knn_matches if len(m) > 0]
     return kp_left, kp_right, left_img, matches, right_img
 
