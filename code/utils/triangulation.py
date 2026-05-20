@@ -1,4 +1,4 @@
-
+import cv2
 import numpy as np
 
 def custom_triangulation(P1: np.ndarray, P2: np.ndarray, pts1: np.ndarray, pts2: np.ndarray) -> np.ndarray:
@@ -26,3 +26,14 @@ def custom_triangulation(P1: np.ndarray, P2: np.ndarray, pts1: np.ndarray, pts2:
         points_3d[i] = X_homogeneous[:3] / X_homogeneous[3]
 
     return points_3d
+
+
+def triangulate_opencv(
+    P1: np.ndarray,
+    P2: np.ndarray,
+    left_pts: np.ndarray,
+    right_pts: np.ndarray,
+) -> np.ndarray:
+    """Triangulates matched points using OpenCV and converts to 3D coordinates."""
+    points_4d = cv2.triangulatePoints(P1, P2, left_pts.T, right_pts.T)
+    return (points_4d[:3, :] / points_4d[3, :]).T
