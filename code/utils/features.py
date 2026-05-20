@@ -15,3 +15,4 @@ def extract_features(img: np.ndarray, num_features: int = NUM_FEATURES):
         raise RuntimeError("No descriptors found in image.")
 
     return keypoints, descriptors
+
