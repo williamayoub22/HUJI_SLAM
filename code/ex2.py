@@ -1,70 +1,15 @@
-from dataclasses import dataclass
-from typing import List, Sequence
 
-import cv2
+from typing import Sequence
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils.image_loader import load_matches_between_images
-from utils.matching import get_matched_points
+from utils.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
 from utils.read_cam_calib import read_calib
-from utils.triangulation import custom_triangulation
-
+from utils.triangulation import custom_triangulation, triangulate_opencv
 
 FRAME_INDEX = 0
-VERTICAL_DEVIATION_THRESHOLD = 2.0
 DEFAULT_FRAMES = (0, 1, 2, 3)
-
-
-@dataclass
-class StereoMatchData:
-    """Container for one stereo pair, its matches, and vertical deviations."""
-    left_img: np.ndarray
-    right_img: np.ndarray
-    kp_left: List[cv2.KeyPoint]
-    kp_right: List[cv2.KeyPoint]
-    matches: List[cv2.DMatch]
-    left_pts: np.ndarray
-    right_pts: np.ndarray
-    deviations: np.ndarray
-
-
-def load_frame_data(frame_idx: int) -> StereoMatchData:
-    """Loads one stereo frame and precomputes matched points and deviations."""
-    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(frame_idx)
-    left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
-    deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
-
-    return StereoMatchData(
-        left_img=left_img,
-        right_img=right_img,
-        kp_left=kp_left,
-        kp_right=kp_right,
-        matches=matches,
-        left_pts=left_pts,
-        right_pts=right_pts,
-        deviations=deviations,
-    )
-
-
-def get_inlier_points(
-    data: StereoMatchData,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Returns matched points that satisfy the vertical-deviation threshold."""
-    inlier_mask = data.deviations <= threshold
-    return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
-
-
-def triangulate_opencv(
-    P1: np.ndarray,
-    P2: np.ndarray,
-    left_pts: np.ndarray,
-    right_pts: np.ndarray,
-) -> np.ndarray:
-    """Triangulates matched points using OpenCV and converts to 3D coordinates."""
-    points_4d = cv2.triangulatePoints(P1, P2, left_pts.T, right_pts.T)
-    return (points_4d[:3, :] / points_4d[3, :]).T
 
 
 def plot_vertical_deviation_histogram(deviations: np.ndarray) -> None:
@@ -88,7 +33,7 @@ def show_image(ax, image: np.ndarray, title: str) -> None:
 
 def plot_matches_by_rejection(
     data: StereoMatchData,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
+    threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
     """Plots accepted and rejected stereo matches on the image pair."""
     inlier_mask = data.deviations <= threshold
@@ -138,7 +83,7 @@ def plot_point_cloud_on_axis(
 
 def print_rejection_statistics(
     data: StereoMatchData,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
+    threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
     """Prints match rejection statistics for a vertical-deviation threshold."""
     num_matches = len(data.matches)
@@ -163,7 +108,7 @@ def section_2_1(frame_idx: int = FRAME_INDEX) -> StereoMatchData:
 
 def section_2_2(
     data: StereoMatchData,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
+    threshold: float = DEVIATION_THRESHOLD,
 ) -> int:
     print(f"--- Section 2.2 ---")
 
@@ -179,7 +124,7 @@ def section_2_2(
 
 def section_2_3(
     data: StereoMatchData,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
+    threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
     print(f"--- Section 2.3 ---")
 
@@ -214,7 +159,7 @@ def section_2_3(
 
 def section_2_4(
     frames_to_test: Sequence[int] = DEFAULT_FRAMES,
-    threshold: float = VERTICAL_DEVIATION_THRESHOLD,
+    threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
     print(f"--- Section 2.4 ---")
 
