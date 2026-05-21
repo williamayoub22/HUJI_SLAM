@@ -43,7 +43,6 @@ def load_matches_between_images(frame_idx):
         matches: Best feature matches between the images.
     """
     left_img, right_img = read_images(frame_idx)
-    kp_left, kp_right, knn_matches = extract_and_match_features(left_img, right_img)
-    matches = [m[0] for m in knn_matches if len(m) > 0]
+    kp_left, kp_right, matches = extract_and_match_features(left_img, right_img)
     return kp_left, kp_right, left_img, matches, right_img
 
