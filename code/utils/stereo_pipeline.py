@@ -1,5 +1,3 @@
-# code/utils/stereo_pipeline.py
-
 from dataclasses import dataclass
 from typing import List
 
@@ -18,7 +16,6 @@ DEVIATION_THRESHOLD = 2.0
 @dataclass
 class StereoMatchData:
     """Container for one stereo pair, its matches, and vertical deviations."""
-
     left_img: np.ndarray
     right_img: np.ndarray
     kp_left: List[cv2.KeyPoint]
@@ -32,7 +29,6 @@ class StereoMatchData:
 @dataclass
 class StereoPointCloud:
     """Container for a stereo pair and its triangulated 3D point cloud."""
-
     frame_idx: int
     data: StereoMatchData
     left_inliers: np.ndarray
@@ -42,7 +38,6 @@ class StereoPointCloud:
 
 def load_frame_data(frame_idx: int) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-
     kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(frame_idx)
     left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
@@ -64,7 +59,6 @@ def get_inlier_points(
     threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Returns matched points that satisfy the vertical-deviation threshold."""
-
     inlier_mask = data.deviations <= threshold
     return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
 
@@ -82,7 +76,6 @@ def create_stereo_point_cloud(
     2. Reject matches whose vertical deviation is too large.
     3. Triangulate the remaining matches.
     """
-
     P1, P2 = read_calib()
 
     data = load_frame_data(frame_idx)
@@ -107,7 +100,6 @@ def compute_rejection_statistics(
     threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[int, int, float]:
     """Computes rejection statistics for a vertical-deviation threshold."""
-
     num_matches = len(data.matches)
     num_rejected = int(np.sum(data.deviations > threshold))
     percentage_rejected = 100.0 * num_rejected / num_matches
