@@ -7,15 +7,7 @@ from utils.stereo_pipeline import create_stereo_point_cloud
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
-
-
-def print_rejection_statistics(data: StereoMatchData) -> None:
-    """Prints match rejection statistics for a vertical-deviation threshold."""
-    num_matches, num_rejected, percentage_rejected = compute_rejection_statistics(data)
-
-    print(f"Total matches: {num_matches}")
-    print(f"Matches with vertical deviation > {DEVIATION_THRESHOLD} px: {num_rejected}")
-    print(f"Percentage: {percentage_rejected:.2f}%")
+NUM_TEMPORAL_MATCHES_TO_DRAW = 30
 
 
 def section_3_1(
@@ -34,14 +26,6 @@ def section_3_1(
 
     point_cloud_0 = create_stereo_point_cloud(FRAME_0_INDEX, threshold)
     point_cloud_1 = create_stereo_point_cloud(FRAME_1_INDEX, threshold)
-
-    print("\nFrame 0:")
-    print_rejection_statistics(point_cloud_0.data)
-    print(f"Number of triangulated points: {len(point_cloud_0.points_3d)}")
-
-    print("\nFrame 1:")
-    print_rejection_statistics(point_cloud_1.data)
-    print(f"Number of triangulated points: {len(point_cloud_1.points_3d)}")
 
     fig = plt.figure(figsize=(16, 7))
 
