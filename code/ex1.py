@@ -5,12 +5,11 @@ import random
 from typing import Tuple, List
 
 from utils.features import extract_features
-from utils.matching import match_features
+from utils.matching import match_features, filter_matches_ratio, RATIO_THRESHOLD
 from utils.image_loader import read_images
 
 # --- Algorithm Parameters ---
 NUM_FEATURES = 1000
-RATIO_THRESHOLD = 0.7
 
 # --- Visualization Parameters ---
 FRAME_INDEX = 0
@@ -67,19 +66,6 @@ def vis_matches(img1, kp1, img2, kp2, matches: list, num_to_draw: int = NUM_MATC
 # ==========================================
 # PART 1.4: Significance Test
 # ==========================================
-def filter_matches_ratio(knn_matches: list, ratio: float = RATIO_THRESHOLD):
-    """LOGIC: Filters matches using Lowe's Ratio Test."""
-    good_matches = []
-    rejected_matches = []
-
-    for m, n in knn_matches:
-        if m.distance < ratio * n.distance:
-            good_matches.append(m)
-        else:
-            rejected_matches.append(m)
-
-    return good_matches, rejected_matches
-
 
 def find_near_miss_match(knn_matches: list, ratio_threshold: float):
     """LOGIC: Finds the rejected match with the ratio closest to the threshold (most likely to be correct).

@@ -8,6 +8,7 @@ from utils.features import extract_features
 from cv2 import DMatch
 
 KNN_NEIGHBORS = 2
+RATIO_THRESHOLD = 0.7
 
 def match_features(des1: np.ndarray, des2: np.ndarray, k: int = KNN_NEIGHBORS) -> Sequence[Sequence[cv2.DMatch]]:
     """
@@ -42,4 +43,17 @@ def extract_and_match_features(
     kp2, desc2 = extract_features(im2)
     matches = match_features(desc1, desc2)
     return kp1, kp2, matches
+
+def filter_matches_ratio(knn_matches: list, ratio: float = RATIO_THRESHOLD):
+    """LOGIC: Filters matches using Lowe's Ratio Test."""
+    good_matches = []
+    rejected_matches = []
+
+    for m, n in knn_matches:
+        if m.distance < ratio * n.distance:
+            good_matches.append(m)
+        else:
+            rejected_matches.append(m)
+
+    return good_matches, rejected_matches
 
