@@ -1,659 +1,408 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.random
-import math
 import time
+from pathlib import Path
+from tqdm import tqdm
 
 from utils.image_loader import read_images
-from utils.matching import extract_and_match_features, get_matched_points
-from utils.visualization import plot_point_cloud_on_axis
-from utils.stereo_pipeline import StereoPointCloud, DEVIATION_THRESHOLD
-from utils.stereo_pipeline import create_stereo_point_cloud
+from utils.features import extract_features
+from utils.matching import match_and_filter, get_matched_points
 from utils.read_cam_calib import read_calib
-from pathlib import Path
+from utils.stereo_pipeline import create_stereo_point_cloud
 
-# ==========================================================
-# HYPERPARAMETERS
-# ==========================================================
-FRAME_0_INDEX = 0
-FRAME_1_INDEX = 1
-NUM_TEMPORAL_MATCHES_TO_DRAW = 200
+# Updated import to include count_supporters and _safe_solvePnP for Task 3.4
+from utils.pnp import find_common_points, ransac_pnp, count_supporters, _safe_solvePnP
 
-# RANSAC / Tracking Optimization Parameters
-MAX_RANSAC_ITERATIONS = 200
-RANSAC_CONFIDENCE = 0.99
-MAX_RANSAC_POINTS = 200  # Limit the max points passed to RANSAC for time optimization
-PNP_SAMPLE_SIZE = 4
-SUPPORTER_THRESHOLD = 2.0  # pixels
+# --- Hyperparameters ---
+FRAME_0, FRAME_1 = 0, 1
+MAX_RANSAC_ITERS = 200  # Dynamic cap converges fast
+RANSAC_CONFIDENCE = 0.99  # 'p' probability of success
+SUPPORTER_THRESH = 2.0  # pixels
+RATIO_THRESHOLD = 0.75  # Lowe's Ratio Test (slightly relaxed for ORB)
+NUM_FEATURES = 3000  # ORB needs more features than SIFT to compensate
+DEVIATION_THRESHOLD = 2.0  # vertical deviation threshold for stereo outliers
+MAX_DEPTH = 300.0  # reject triangulated points farther than this (meters)
+MAX_TRANSLATION = 30.0  # reject PnP results with ||t|| > this (meters per frame)
+MIN_INLIERS = 6  # minimum RANSAC supporters to accept a result
 
-# Dataset paths
-SCRIPT_DIR = Path(__file__).resolve().parent
-POSES_PATH = SCRIPT_DIR.parent / "dataset" / "poses" / "00.txt"
-SEQ_DIR = SCRIPT_DIR.parent / "dataset" / "sequences" / "00"
+SEQ_DIR = Path(__file__).resolve().parent.parent / "dataset" / "sequences" / "00"
+POSES_PATH = Path(__file__).resolve().parent.parent / "dataset" / "poses" / "00.txt"
 
 
-# ==========================================================
-# Shared Helpers
-# ==========================================================
-
-def get_k_and_p_matrices():
-    """Returns K, P1, P2."""
+def get_calib():
     P1, P2 = read_calib()
-    K = P1[:, :3]
-    return K, P1, P2
+    return P1[:, :3], P1, P2
 
 
-def rodriguez_to_mat(rvec, tvec):
-    """Converts Rodrigues rotation vector + translation to a 3x4 [R|t] matrix."""
-    rot, _ = cv2.Rodrigues(rvec)
-    return np.hstack((rot, tvec))
+def track_sequence():
+    """Runs the full tracking pipeline with Caching, ORB, & Lowe's Ratio Test."""
+    K, P1, P2 = get_calib()
+    num_frames = len(list((SEQ_DIR / "image_0").glob("*.png")))
+
+    global_T = np.eye(4)
+    trajectory = [np.zeros(3)]
+
+    t0 = time.time()
+
+    # Initialize "previous" state using Frame 0
+    pc_prev = create_stereo_point_cloud(0, threshold=DEVIATION_THRESHOLD, max_depth=MAX_DEPTH)
+    img_prev, _ = read_images(0)
+    kp_prev, des_prev = extract_features(img_prev, NUM_FEATURES)
+
+    for i in tqdm(range(num_frames - 1), desc="Tracking Frames", unit="frame"):
+        # 1. Load and compute the "current" frame (i+1)
+        img_curr, _ = read_images(i + 1)
+        kp_curr, des_curr = extract_features(img_curr, NUM_FEATURES)
+
+        # Create current point cloud here so we can use it to find right_1 points
+        pc_curr = create_stereo_point_cloud(i + 1, threshold=DEVIATION_THRESHOLD, max_depth=MAX_DEPTH)
+
+        # Safety check
+        if des_prev is None or des_curr is None:
+            pc_prev = pc_curr
+            kp_prev, des_prev = kp_curr, des_curr
+            trajectory.append(trajectory[-1].copy())
+            continue
+
+        # 2. Match temporal features and apply Lowe's Ratio Test
+        good_matches = match_and_filter(des_prev, des_curr, RATIO_THRESHOLD)
+
+        if len(good_matches) < 4:
+            pc_prev = pc_curr
+            kp_prev, des_prev = kp_curr, des_curr
+            trajectory.append(trajectory[-1].copy())
+            continue
+
+        # Extract 2D points from the filtered matches
+        pts_l0, pts_l1 = get_matched_points(kp_prev, kp_curr, good_matches)
+
+        # 3. Find 3D points and run PnP
+        pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(pc_prev, pc_curr, pts_l0, pts_l1)
+
+        # Extract best_mask alongside T_rel so we can plot inliers vs outliers
+        T_rel, best_mask = ransac_pnp(pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c, K, P1, P2,
+                                      max_iters=MAX_RANSAC_ITERS,
+                                      confidence=RANSAC_CONFIDENCE,
+                                      supporter_thresh=SUPPORTER_THRESH,
+                                      max_translation=MAX_TRANSLATION,
+                                      min_inliers=MIN_INLIERS)
+
+        # Generate assignment plots AND print report statistics for the very first frame pair
+        if i == 0 and T_rel is not None:
+            # Task 3.4: Single PnP hypothesis run
+            idx = np.random.choice(len(pts_3d), 4, replace=False)
+            T_single = _safe_solvePnP(pts_3d[idx], pts_l1_c[idx], K, cv2.SOLVEPNP_EPNP)
+            mask_single = np.zeros(len(pts_3d), dtype=bool)
+            if T_single is not None:
+                mask_single, _ = count_supporters(
+                    T_single, pts_3d, pts_l0_c, pts_r0_c, pts_l1_c, pts_r1_c, K, P1, P2, SUPPORTER_THRESH
+                )
+
+            # --- PRINT STATISTICS FOR REPORT ---
+            tqdm.write("\n" + "=" * 50)
+            tqdm.write("REPORT STATISTICS (FRAME 0 -> 1)")
+            tqdm.write("=" * 50)
+            tqdm.write(f"Task 3.1 - Pair 0 Point Cloud Size : {len(pc_prev.points_3d)} points")
+            tqdm.write(f"Task 3.1 - Pair 1 Point Cloud Size : {len(pc_curr.points_3d)} points")
+            tqdm.write(f"Task 3.2 - Raw Temporal Matches   : {len(good_matches)} matches")
+            tqdm.write(f"Task 3.3 - 4-Way Common Points    : {len(pts_3d)} matches given to PnP")
+            if T_single is not None:
+                tqdm.write(f"Task 3.4 - Single PnP Supporters  : {np.sum(mask_single)} / {len(pts_3d)}")
+            tqdm.write(f"Task 3.5 - RANSAC Final Inliers   : {np.sum(best_mask)}")
+            tqdm.write(f"Task 3.5 - RANSAC Final Outliers  : {len(pts_3d) - np.sum(best_mask)}")
+            tqdm.write("=" * 50 + "\n")
+
+            # --- PLOTS ---
+            tqdm.write("Generating intermediate plots for Tasks 3.1 to 3.5...")
+            plot_task_3_1_point_clouds(pc_prev, pc_curr)
+            plot_task_3_2_temporal_matches(img_prev, img_curr, pts_l0, pts_l1)
+            plot_task_3_3_cameras(T_rel, P1, P2)
+            if T_single is not None:
+                plot_task_3_4_single_pnp(img_prev, img_curr, pts_l0_c, pts_l1_c, mask_single)
+            plot_task_3_5_ransac_matches(img_prev, img_curr, pts_l0_c, pts_l1_c, best_mask)
+            plot_task_3_5_point_clouds(pc_prev, pc_curr, T_rel)
+
+        if T_rel is None:
+            T_rel = np.hstack((np.eye(3), np.zeros((3, 1))))
+
+        step_T = np.eye(4)
+        step_T[:3, :] = T_rel
+        global_T = step_T @ global_T
+
+        # Calculate position: -R^T * t
+        pos = -global_T[:3, :3].T @ global_T[:3, 3]
+        trajectory.append(pos)
+
+        # --- SHIFT THE CACHE ---
+        pc_prev = pc_curr
+        kp_prev = kp_curr
+        des_prev = des_curr
+        img_prev = img_curr
+
+    print(f"\nTracking took {time.time() - t0:.2f}s")
+    return np.array(trajectory)
 
 
-def find_common_points(point_cloud_0, pts_left0, pts_left1):
-    """
-    Finds points that appear in both the stereo point cloud of pair 0
-    and the temporal left0-left1 matches.
-
-    Assuming pts_left0 and pts_left1 are already sorted by match quality (descending),
-    the returned arrays will preserve this order, enabling PROSAC sampling.
-
-    Returns:
-        pts_3d_common:     Nx3  – 3D coordinates from triangulation of pair 0
-        pts_2d_l1_common:  Nx2  – pixel locations on left_1
-        pts_2d_l0_common:  Nx2  – pixel locations on left_0
-        pts_2d_r0_common:  Nx2  – pixel locations on right_0
-    """
-    # Build dictionary from left_0 stereo inlier coords -> index in point cloud
-    stereo_dict = {}
-    for j, pt in enumerate(point_cloud_0.left_inliers):
-        key = (float(pt[0]), float(pt[1]))
-        stereo_dict[key] = j
-
-    pts_3d_common = []
-    pts_2d_l1_common = []
-    pts_2d_l0_common = []
-    pts_2d_r0_common = []
-
-    for i, pt_temporal in enumerate(pts_left0):
-        key = (float(pt_temporal[0]), float(pt_temporal[1]))
-        if key in stereo_dict:
-            j = stereo_dict[key]
-            pts_3d_common.append(point_cloud_0.points_3d[j])
-            pts_2d_l1_common.append(pts_left1[i])
-            pts_2d_l0_common.append(pt_temporal)
-            pts_2d_r0_common.append(point_cloud_0.right_inliers[j])
-
-    return (np.array(pts_3d_common), np.array(pts_2d_l1_common),
-            np.array(pts_2d_l0_common), np.array(pts_2d_r0_common))
+# ########################################################################### #
+# ######################## EXERCISE PLOT FUNCTIONS ########################## #
+# ########################################################################### #
 
 
-# ==========================================================
-# SECTION 3.1
-# ==========================================================
-def section_3_1(threshold=DEVIATION_THRESHOLD):
-    """Creates point clouds for stereo pair 0 and stereo pair 1."""
-    print("--- Section 3.1 ---")
+def plot_trajectory(trajectory):
+    """Plots estimated vs ground truth trajectory."""
+    gt_poses = [np.array([float(x) for x in line.split()]).reshape(3, 4)
+                for line in open(POSES_PATH)]
+    gt_traj = np.array([-p[:3, :3].T @ p[:3, 3] for p in gt_poses])
 
-    point_cloud_0 = create_stereo_point_cloud(FRAME_0_INDEX, threshold)
-    point_cloud_1 = create_stereo_point_cloud(FRAME_1_INDEX, threshold)
+    plt.figure(figsize=(10, 8))
+    plt.plot(trajectory[:, 0], trajectory[:, 2], 'b-', label='Estimated')
+    plt.plot(gt_traj[:len(trajectory), 0], gt_traj[:len(trajectory), 2], 'r-', label='Ground Truth')
+    plt.title("Camera Trajectory (X-Z plane)")
+    plt.xlabel("X (m)")
+    plt.ylabel("Z (m)")
+    plt.legend()
+    plt.axis('equal')
+    plt.grid(True)
+    plt.show()
 
+
+def plot_task_3_1_point_clouds(pc0, pc1):
+    """Task 3.1: Plot the 3D point clouds for both stereo pairs (Pair 0 and Pair 1)."""
     fig = plt.figure(figsize=(16, 7))
 
-    ax0 = fig.add_subplot(1, 2, 1, projection="3d")
-    plot_point_cloud_on_axis(ax0, point_cloud_0.points_3d,
-                             "Point Cloud from Stereo Pair 0", color="tab:blue")
+    for idx, (pc, title, color) in enumerate(zip(
+            [pc0, pc1],
+            ["Pair 0", "Pair 1"],
+            ["tab:blue", "tab:orange"]
+    )):
+        ax = fig.add_subplot(1, 2, idx + 1, projection="3d")
+        pts_3d = pc.points_3d
 
-    ax1 = fig.add_subplot(1, 2, 2, projection="3d")
-    plot_point_cloud_on_axis(ax1, point_cloud_1.points_3d,
-                             "Point Cloud from Stereo Pair 1", color="tab:orange")
+        # Crop meaningless points to keep the plot focused
+        crop_mask = (pts_3d[:, 2] > 0) & (pts_3d[:, 2] < 100)
+        pts_cropped = pts_3d[crop_mask]
+
+        ax.scatter(
+            pts_cropped[:, 0],
+            pts_cropped[:, 1],
+            pts_cropped[:, 2],
+            s=10,
+            c=color,
+            alpha=0.6,
+        )
+
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
+        ax.set_title(f"Task 3.1: Triangulation Point Cloud ({title})\n{len(pts_cropped)} points")
+
+        # Match the viewing angle from Exercise 2
+        ax.view_init(elev=-70, azim=-90)
 
     plt.tight_layout()
     plt.show()
 
-    return point_cloud_0, point_cloud_1
 
+def plot_task_3_2_temporal_matches(img0, img1, pts_l0, pts_l1):
+    """Task 3.2: Plot the temporal matches between left_0 and left_1 with connecting lines."""
+    h1, w1 = img0.shape[:2]
+    h2, w2 = img1.shape[:2]
 
-# ==========================================================
-# SECTION 3.2
-# ==========================================================
-def plot_temporal_left_matches(left0_img, kp_left0, left1_img, kp_left1,
-                               matches, num_to_draw=NUM_TEMPORAL_MATCHES_TO_DRAW):
-    """Plots feature matches between left_0 and left_1."""
-    matches_to_draw = matches[:min(num_to_draw, len(matches))]
+    # Create a combined side-by-side image
+    combined_img = np.zeros((max(h1, h2), w1 + w2), dtype=img0.dtype)
+    combined_img[:h1, :w1] = img0
+    combined_img[:h2, w1:w1 + w2] = img1
 
-    left0_vis = cv2.cvtColor(left0_img, cv2.COLOR_GRAY2RGB) if left0_img.ndim == 2 \
-        else cv2.cvtColor(left0_img, cv2.COLOR_BGR2RGB)
-    left1_vis = cv2.cvtColor(left1_img, cv2.COLOR_GRAY2RGB) if left1_img.ndim == 2 \
-        else cv2.cvtColor(left1_img, cv2.COLOR_BGR2RGB)
+    plt.figure(figsize=(16, 6))
+    plt.imshow(combined_img, cmap='gray')
 
-    h0, w0 = left0_vis.shape[:2]
-    h1, w1 = left1_vis.shape[:2]
+    # Shift x-coordinates for the points on the second image
+    pts_l1_shifted = pts_l1.copy()
+    pts_l1_shifted[:, 0] += w1
 
-    canvas = np.zeros((h0 + h1, max(w0, w1), 3), dtype=left0_vis.dtype)
-    canvas[:h0, :w0] = left0_vis
-    canvas[h0:h0 + h1, :w1] = left1_vis
+    # Draw connecting lines with reduced opacity (alpha=0.1)
+    for p0, p1 in zip(pts_l0, pts_l1_shifted):
+        plt.plot([p0[0], p1[0]], [p0[1], p1[1]], c='cyan', alpha=0.1, linewidth=0.5)
 
-    plt.figure(figsize=(10, 12))
-    plt.imshow(canvas)
+    # Draw points on top of the lines (zorder=5 pushes them to the front)
+    plt.scatter(pts_l0[:, 0], pts_l0[:, 1], c="tab:blue", s=15, label="left_0 Matches", zorder=5)
+    plt.scatter(pts_l1_shifted[:, 0], pts_l1_shifted[:, 1], c="tab:orange", s=15, label="left_1 Matches", zorder=5)
+
+    plt.title(f"Task 3.2: Matches between left images ({len(pts_l0)} total matches)")
     plt.axis("off")
-    plt.title("Temporal feature matches between left_0 and left_1")
-
-    for match in matches_to_draw:
-        x0, y0 = kp_left0[match.queryIdx].pt
-        x1, y1 = kp_left1[match.trainIdx].pt
-        y1_shifted = y1 + h0
-        plt.scatter([x0, x1], [y0, y1_shifted], s=20)
-        plt.plot([x0, x1], [y0, y1_shifted], linewidth=1)
-
+    plt.legend(loc="lower center", ncol=2)
     plt.tight_layout()
     plt.show()
 
 
-def section_3_2(frame_idx0=FRAME_0_INDEX, frame_idx1=FRAME_1_INDEX):
-    """Matches features between left_0 and left_1."""
-    print("--- Section 3.2 ---")
+def plot_task_3_3_cameras(T, P1, P2):
+    """Task 3.3: Plot the relative position of the four cameras (from above)."""
+    # Calculate baseline translation from projection matrices
+    # P2[0,3] = K[0,0] * tx -> tx = P2[0,3] / P1[0,0]
+    tx = P2[0, 3] / P1[0, 0]
 
-    left0_img, _ = read_images(frame_idx0)
-    left1_img, _ = read_images(frame_idx1)
+    # Camera centers (C = -R^T * t)
+    cam_l0 = np.array([0, 0, 0])
+    cam_r0 = np.array([-tx, 0, 0])
 
-    kp_left0, kp_left1, matches = extract_and_match_features(left0_img, left1_img)
+    R, t = T[:3, :3], T[:3, 3]
+    cam_l1 = -R.T @ t
+    cam_r1 = cam_l1 + R.T @ np.array([-tx, 0, 0])
 
-    # Sort matches by distance (ascending) so higher quality matches are first.
-    # This prepares the data for PROSAC sampling.
-    matches = sorted(matches, key=lambda m: m.distance)
+    plt.figure(figsize=(8, 8))
 
-    pts_left0, pts_left1 = get_matched_points(kp_left0, kp_left1, matches)
+    # Plot stereo baselines (connecting left and right cameras)
+    plt.plot([cam_l0[0], cam_r0[0]], [cam_l0[2], cam_r0[2]], 'k--', alpha=0.6, label='Stereo Baseline')
+    plt.plot([cam_l1[0], cam_r1[0]], [cam_l1[2], cam_r1[2]], 'k--', alpha=0.6)
 
-    print(f"Number of matches between left_{frame_idx0} and left_{frame_idx1}: {len(matches)}")
+    # Plot camera locations
+    plt.scatter(cam_l0[0], cam_l0[2], c='blue', s=200, marker='^', label='left_0')
+    plt.scatter(cam_r0[0], cam_r0[2], c='cyan', s=200, marker='^', label='right_0')
+    plt.scatter(cam_l1[0], cam_l1[2], c='red', s=200, marker='^', label='left_1')
+    plt.scatter(cam_r1[0], cam_r1[2], c='orange', s=200, marker='^', label='right_1')
 
-    plot_temporal_left_matches(left0_img, kp_left0, left1_img, kp_left1, matches)
+    # Add direction arrows pointing down the Z-axis of each camera
+    plt.arrow(cam_l0[0], cam_l0[2], 0, 0.5, head_width=0.05, color='blue', alpha=0.5)
+    plt.arrow(cam_r0[0], cam_r0[2], 0, 0.5, head_width=0.05, color='cyan', alpha=0.5)
 
-    return pts_left0, pts_left1, matches
+    dir_1 = R.T @ np.array([0, 0, 1])  # Frame 1's Z-axis in Frame 0's coordinates
+    plt.arrow(cam_l1[0], cam_l1[2], dir_1[0] * 0.5, dir_1[2] * 0.5, head_width=0.05, color='red', alpha=0.5)
+    plt.arrow(cam_r1[0], cam_r1[2], dir_1[0] * 0.5, dir_1[2] * 0.5, head_width=0.05, color='orange', alpha=0.5)
 
-
-# ==========================================================
-# SECTION 3.3
-# ==========================================================
-def plot_camera_positions(R, tvec):
-    """Plots the X-Z bird's-eye view of the 4 cameras."""
-    P1, P2 = read_calib()
-    focal_length = P1[0, 0]
-    tx_pixels = P2[0, 3]
-    baseline = -tx_pixels / focal_length
-
-    cam_l0_pos = np.array([0, 0, 0])
-    cam_r0_pos = np.array([baseline, 0, 0])
-
-    cam_l1_pos = -R.T @ tvec.flatten()
-    cam_r1_pos = cam_l1_pos + R.T @ np.array([baseline, 0, 0])
-
-    plt.figure(figsize=(8, 6))
-    cameras_x = [cam_l0_pos[0], cam_r0_pos[0], cam_l1_pos[0], cam_r1_pos[0]]
-    cameras_z = [cam_l0_pos[2], cam_r0_pos[2], cam_l1_pos[2], cam_r1_pos[2]]
-    labels = ['$left_0$', '$right_0$', '$left_1$', '$right_1$']
-    colors = ['blue', 'blue', 'orange', 'orange']
-
-    plt.scatter(cameras_x, cameras_z, c=colors, s=100, marker='s')
-    for i, label in enumerate(labels):
-        plt.annotate(label, (cameras_x[i], cameras_z[i]),
-                     textcoords="offset points", xytext=(0, 10), ha='center')
-
-    plt.plot([cam_l0_pos[0], cam_r0_pos[0]], [cam_l0_pos[2], cam_r0_pos[2]],
-             'b--', label='Stereo Pair 0')
-    plt.plot([cam_l1_pos[0], cam_r1_pos[0]], [cam_l1_pos[2], cam_r1_pos[2]],
-             color='orange', linestyle='--', label='Stereo Pair 1')
-    plt.plot([cam_l0_pos[0], cam_l1_pos[0]], [cam_l0_pos[2], cam_l1_pos[2]],
-             'gray', linestyle=':', label='Camera Motion')
-
-    plt.title("Relative Position of Four Cameras (Top-Down View)")
-    plt.xlabel("X (meters)")
-    plt.ylabel("Z (meters)")
-    plt.legend()
-    plt.grid(True)
+    plt.title("Task 3.3: Relative Positions of 4 Cameras (Top-Down X-Z)")
+    plt.xlabel("X (m)")
+    plt.ylabel("Z (m)")
     plt.axis('equal')
+    plt.grid(True)
+    plt.legend()
     plt.show()
 
 
-def section_3_3(point_cloud_0, pts_left0, pts_left1):
-    """
-    Finds 4 key-points matched on all four images and calculates [R|t] of left_1
-    using PnP.
-    """
-    print("--- Section 3.3 ---")
+def plot_task_3_4_single_pnp(img0, img1, pts_l0, pts_l1, mask):
+    """Task 3.4: Plot on images left_0 and left_1 the supporters for a SINGLE PnP hypothesis."""
+    mask = np.array(mask, dtype=bool).flatten()
 
-    K, _, _ = get_k_and_p_matrices()
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common = \
-        find_common_points(point_cloud_0, pts_left0, pts_left1)
+    axes[0].imshow(img0, cmap='gray')
+    axes[0].set_title("Temporal Matches on left_0")
+    axes[1].imshow(img1, cmap='gray')
+    axes[1].set_title("Temporal Matches on left_1")
 
-    print(f"Found {len(pts_3d_common)} common points across all four images.")
+    inlier_idx = np.where(mask)[0]
+    outlier_idx = np.where(~mask)[0]
 
-    if len(pts_3d_common) < PNP_SAMPLE_SIZE:
-        raise ValueError("Not enough common points to compute PnP.")
+    # Outliers (Cyan)
+    axes[0].scatter(pts_l0[outlier_idx, 0], pts_l0[outlier_idx, 1], c="cyan", s=15, label="Rejected (Outliers)")
+    axes[1].scatter(pts_l1[outlier_idx, 0], pts_l1[outlier_idx, 1], c="cyan", s=15, label="Rejected (Outliers)")
 
-    # Choose 4 random key-points
-    random_indices = numpy.random.choice(len(pts_3d_common), PNP_SAMPLE_SIZE, replace=False)
-    sample_3d = pts_3d_common[random_indices].astype(np.float64)
-    sample_2d = pts_2d_l1_common[random_indices].astype(np.float64)
+    # Inliers/Supporters (Orange)
+    axes[0].scatter(pts_l0[inlier_idx, 0], pts_l0[inlier_idx, 1], c="orange", s=15, label="Accepted (Inliers)")
+    axes[1].scatter(pts_l1[inlier_idx, 0], pts_l1[inlier_idx, 1], c="orange", s=15, label="Accepted (Inliers)")
 
-    # Apply PnP
-    success, rvec, tvec = cv2.solvePnP(sample_3d, sample_2d, K, None, flags=cv2.SOLVEPNP_EPNP)
-    if not success:
-        raise RuntimeError("cv2.solvePnP failed.")
+    for ax in axes:
+        ax.axis("off")
 
-    R, _ = cv2.Rodrigues(rvec)
-    T_mat = np.hstack((R, tvec))
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2)
 
-    print(f"Calculated Extrinsic Matrix [R|t]:\n{np.round(T_mat, 4)}")
-
-    plot_camera_positions(R, tvec)
-
-    return pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common, T_mat
-
-
-# ==========================================================
-# SECTION 3.4 – Supporter counting
-# ==========================================================
-def project_points(points_3d, projection_matrix):
-    """
-    Projects Nx3 3D points using a 3x4 projection matrix.
-    Returns Nx2 pixel coordinates.
-    """
-    ones = np.ones((points_3d.shape[0], 1))
-    pts_h = np.hstack((points_3d, ones))  # Nx4
-    projected = (projection_matrix @ pts_h.T).T  # Nx3
-    return projected[:, :2] / projected[:, 2:3]
-
-
-def count_supporters(T_left1, points_3d, pts_left0, pts_right0, pts_left1,
-                     K, P1, P2, threshold=SUPPORTER_THRESHOLD):
-    """
-    Counts how many 3D points project within `threshold` pixels on the valid images.
-    Returns: boolean mask of supporters, count of supporters
-    """
-    P_left0 = P1
-    P_right0 = P2
-    P_left1 = K @ T_left1
-
-    proj_l0 = project_points(points_3d, P_left0)
-    proj_r0 = project_points(points_3d, P_right0)
-    proj_l1 = project_points(points_3d, P_left1)
-
-    err_l0 = np.linalg.norm(proj_l0 - pts_left0, axis=1)
-    err_r0 = np.linalg.norm(proj_r0 - pts_right0, axis=1)
-    err_l1 = np.linalg.norm(proj_l1 - pts_left1, axis=1)
-
-    supporter_mask = (err_l0 < threshold) & (err_r0 < threshold) & (err_l1 < threshold)
-
-    return supporter_mask, int(np.sum(supporter_mask))
-
-
-def plot_supporters_on_images(frame_idx0, frame_idx1, pts_left0, pts_left1,
-                               supporter_mask):
-    """Plots matches on left_0 and left_1 with supporters in a different color."""
-    left0_img, _ = read_images(frame_idx0)
-    left1_img, _ = read_images(frame_idx1)
-
-    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(16, 6))
-
-    ax0.imshow(left0_img, cmap='gray')
-    ax0.set_title(f"left_{frame_idx0}")
-    ax0.axis('off')
-
-    ax1.imshow(left1_img, cmap='gray')
-    ax1.set_title(f"left_{frame_idx1}")
-    ax1.axis('off')
-
-    outlier_mask = ~supporter_mask
-
-    # Outliers first (cyan)
-    ax0.scatter(pts_left0[outlier_mask, 0], pts_left0[outlier_mask, 1],
-                c='cyan', s=8, label='Outliers')
-    ax1.scatter(pts_left1[outlier_mask, 0], pts_left1[outlier_mask, 1],
-                c='cyan', s=8)
-
-    # Supporters on top (orange)
-    ax0.scatter(pts_left0[supporter_mask, 0], pts_left0[supporter_mask, 1],
-                c='orange', s=8, label='Supporters')
-    ax1.scatter(pts_left1[supporter_mask, 0], pts_left1[supporter_mask, 1],
-                c='orange', s=8)
-
-    ax0.legend()
-    plt.suptitle("Matches on left images – supporters vs outliers")
+    plt.suptitle("Task 3.4: Supporters for a Single Random PnP Hypothesis (4 Points)")
     plt.tight_layout()
     plt.show()
 
 
-def section_3_4(pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common,
-                T_mat):
-    """
-    Section 3.4: Count supporters for the T computed in 3.3 and plot them.
-    """
-    print("--- Section 3.4 ---")
+def plot_task_3_5_ransac_matches(img0, img1, pts_l0, pts_l1, mask):
+    """Task 3.5: Plot on images left_0 and left_1 the FINAL RANSAC inliers and outliers."""
+    mask = np.array(mask, dtype=bool).flatten()
 
-    K, P1, P2 = get_k_and_p_matrices()
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    supporter_mask, num_supporters = count_supporters(
-        T_mat, pts_3d_common, pts_2d_l0_common, pts_2d_r0_common,
-        pts_2d_l1_common, K, P1, P2
-    )
+    axes[0].imshow(img0, cmap='gray')
+    axes[0].set_title("Temporal Matches on left_0")
+    axes[1].imshow(img1, cmap='gray')
+    axes[1].set_title("Temporal Matches on left_1")
 
-    print(f"Number of supporters: {num_supporters} / {len(pts_3d_common)}")
+    inlier_idx = np.where(mask)[0]
+    outlier_idx = np.where(~mask)[0]
 
-    plot_supporters_on_images(FRAME_0_INDEX, FRAME_1_INDEX,
-                               pts_2d_l0_common, pts_2d_l1_common, supporter_mask)
+    # Outliers (Cyan)
+    axes[0].scatter(pts_l0[outlier_idx, 0], pts_l0[outlier_idx, 1], c="cyan", s=15, label="Rejected (Outliers)")
+    axes[1].scatter(pts_l1[outlier_idx, 0], pts_l1[outlier_idx, 1], c="cyan", s=15, label="Rejected (Outliers)")
 
-    return supporter_mask
+    # Inliers/Supporters (Orange)
+    axes[0].scatter(pts_l0[inlier_idx, 0], pts_l0[inlier_idx, 1], c="orange", s=15, label="Accepted (Inliers)")
+    axes[1].scatter(pts_l1[inlier_idx, 0], pts_l1[inlier_idx, 1], c="orange", s=15, label="Accepted (Inliers)")
 
+    for ax in axes:
+        ax.axis("off")
 
-# ==========================================================
-# SECTION 3.5 – Dynamic PROSAC + PnP
-# ==========================================================
-def ransac_pnp(pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common,
-               K, P1, P2,
-               max_iterations=MAX_RANSAC_ITERATIONS,
-               sample_size=PNP_SAMPLE_SIZE,
-               threshold=SUPPORTER_THRESHOLD,
-               max_points=MAX_RANSAC_POINTS,
-               confidence=RANSAC_CONFIDENCE):
-    """
-    Custom RANSAC with PROSAC sampling and dynamic iteration stopping criterion.
-    Returns: best T (3x4), inlier mask
-    """
-    # 1. Limit points to MAX_RANSAC_POINTS to optimize runtime
-    if len(pts_3d_common) > max_points:
-        pts_3d_common = pts_3d_common[:max_points]
-        pts_2d_l1_common = pts_2d_l1_common[:max_points]
-        pts_2d_l0_common = pts_2d_l0_common[:max_points]
-        pts_2d_r0_common = pts_2d_r0_common[:max_points]
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2)
 
-    n = len(pts_3d_common)
-    best_num_supporters = 0
-    best_mask = np.zeros(n, dtype=bool)
-    best_T = None
-
-    if n < sample_size:
-        return best_T, best_mask
-
-    # PROSAC dynamic limits
-    # We expand the sample pool (m) iteratively.
-    # a_target defines how many samples to draw from a pool size m before expanding.
-    a_target = max(1, max_iterations // max(1, n - sample_size + 1))
-    m = sample_size - 1
-    a_count = 0
-    iteration = 0
-
-    num_iterations = max_iterations
-
-    while iteration < num_iterations:
-        # PROSAC Selection:
-        # Sample the m-th element and 3 other elements from [0, m-1]
-        if m < n:
-            idx = list(np.random.choice(m, sample_size - 1, replace=False))
-            sample_indices = np.array(idx + [m])
-            a_count += 1
-            if a_count >= a_target:
-                m += 1
-                a_count = 0
-        else:
-            # Fallback to standard uniform sampling if we exceed the sorted pool
-            sample_indices = np.random.choice(n, sample_size, replace=False)
-
-        sample_3d = pts_3d_common[sample_indices].astype(np.float64)
-        sample_2d = pts_2d_l1_common[sample_indices].astype(np.float64)
-
-        success, rvec, tvec = cv2.solvePnP(
-            sample_3d, sample_2d, K, None, flags=cv2.SOLVEPNP_EPNP
-        )
-        if success:
-            T = rodriguez_to_mat(rvec, tvec)
-            mask, num_sup = count_supporters(
-                T, pts_3d_common, pts_2d_l0_common, pts_2d_r0_common,
-                pts_2d_l1_common, K, P1, P2, threshold
-            )
-
-            if num_sup > best_num_supporters:
-                best_num_supporters = num_sup
-                best_mask = mask
-                best_T = T
-
-                # Dynamic RANSAC iterations stopping criteria
-                w = num_sup / float(n)  # Inlier ratio
-                if w < 1.0:
-                    denom = math.log(1 - w**sample_size)
-                    # To prevent division by zero or errors
-                    if denom < -1e-8:
-                        i_dynamic = math.log(1 - confidence) / denom
-                        num_iterations = min(num_iterations, int(math.ceil(i_dynamic)))
-                else:
-                    num_iterations = 0  # 100% inliers, stop immediately
-
-        iteration += 1
-
-    # Refine: re-run PnP on ALL identified inliers
-    if best_T is not None and np.sum(best_mask) >= sample_size:
-        inlier_3d = pts_3d_common[best_mask].astype(np.float64)
-        inlier_2d = pts_2d_l1_common[best_mask].astype(np.float64)
-
-        success, rvec, tvec = cv2.solvePnP(
-            inlier_3d, inlier_2d, K, None, flags=cv2.SOLVEPNP_ITERATIVE
-        )
-        if success:
-            best_T = rodriguez_to_mat(rvec, tvec)
-            # Recount after refinement
-            best_mask, best_num_supporters = count_supporters(
-                best_T, pts_3d_common, pts_2d_l0_common, pts_2d_r0_common,
-                pts_2d_l1_common, K, P1, P2, threshold
-            )
-
-    return best_T, best_mask
+    plt.suptitle("Task 3.5: Final Best RANSAC Inliers vs Outliers")
+    plt.tight_layout()
+    plt.show()
 
 
-def section_3_5(point_cloud_0, point_cloud_1,
-                pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common):
-    """
-    Section 3.5: RANSAC + PnP.
-    - Plot the two point clouds (pair 0 transformed by T, and pair 1).
-    - Plot inliers/outliers on left_0 and left_1.
-    """
-    print("--- Section 3.5 ---")
-
-    K, P1, P2 = get_k_and_p_matrices()
-
-    best_T, inlier_mask = ransac_pnp(
-        pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common,
-        K, P1, P2
-    )
-
-    print(f"RANSAC inliers: {int(np.sum(inlier_mask))} / {len(inlier_mask)}")
-    print(f"Best T:\n{np.round(best_T, 4)}")
-
-    # --- Plot the two point clouds ---
-    R = best_T[:3, :3]
-    t = best_T[:3, 3]
-
-    # Transform pair 0 cloud into pair 1 coordinates
-    cloud0_transformed = (R @ point_cloud_0.points_3d.T).T + t
-
-    # Crop to reasonable depth for display
-    cloud0_t = cloud0_transformed
-    cloud1 = point_cloud_1.points_3d
-
-    # Simple depth crop: keep points with z in [0, 300]
-    mask0 = (cloud0_t[:, 2] > 0) & (cloud0_t[:, 2] < 300)
-    mask1 = (cloud1[:, 2] > 0) & (cloud1[:, 2] < 300)
-
+def plot_task_3_5_point_clouds(pc0, pc1, T):
+    """Task 3.5: Plot the two 3D point clouds (pair 1 and pair 0 after T)."""
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(cloud0_t[mask0, 0], cloud0_t[mask0, 1], cloud0_t[mask0, 2],
-               s=5, c='tab:blue', alpha=0.4, label='Pair 0 (transformed)')
-    ax.scatter(cloud1[mask1, 0], cloud1[mask1, 1], cloud1[mask1, 2],
-               s=5, c='tab:orange', alpha=0.4, label='Pair 1')
+    ax = fig.add_subplot(111, projection="3d")
+
+    # Transform pc0 into left_1 coordinates: X_1 = R * X_0 + t
+    R, t = T[:3, :3], T[:3, 3]
+    pts0_transformed = (R @ pc0.points_3d.T).T + t
+    pts1_3d = pc1.points_3d
+
+    # Crop meaningless/infinity points to prevent the plot from stretching to infinity
+    crop_mask0 = (pts0_transformed[:, 2] > 0) & (pts0_transformed[:, 2] < 100)
+    crop_mask1 = (pts1_3d[:, 2] > 0) & (pts1_3d[:, 2] < 100)
+
+    p0_cropped = pts0_transformed[crop_mask0]
+    p1_cropped = pts1_3d[crop_mask1]
+
+    ax.scatter(
+        p0_cropped[:, 0],
+        p0_cropped[:, 1],
+        p0_cropped[:, 2],
+        s=10,
+        c="tab:blue",
+        alpha=0.6,
+        label="Pair 0 (Transformed)"
+    )
+
+    ax.scatter(
+        p1_cropped[:, 0],
+        p1_cropped[:, 1],
+        p1_cropped[:, 2],
+        s=10,
+        c="tab:orange",
+        alpha=0.6,
+        label="Pair 1"
+    )
+
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
-    ax.set_title("Aligned Point Clouds (pair 0 after T, pair 1)")
+    ax.set_title("Task 3.5: 3D Point Clouds in left_1 Frame")
+
+    # Set the same viewing angle as the previous exercise
     ax.view_init(elev=-70, azim=-90)
     ax.legend()
+
     plt.tight_layout()
     plt.show()
-
-    # --- Plot inliers / outliers on left images ---
-    plot_supporters_on_images(FRAME_0_INDEX, FRAME_1_INDEX,
-                               pts_2d_l0_common, pts_2d_l1_common, inlier_mask)
-
-    return best_T
-
-
-# ==========================================================
-# SECTION 3.6 – Full sequence tracking
-# ==========================================================
-def track_pair(frame_idx0, frame_idx1, K, P1, P2, threshold=DEVIATION_THRESHOLD):
-    """
-    Performs one step of the tracking pipeline between consecutive frames:
-    1. Build stereo point cloud for pair 0.
-    2. Match left_0 to left_1.
-    3. Find common points.
-    4. PROSAC-RANSAC + PnP.
-
-    Returns: best T (3x4), point_cloud for frame_idx0
-    """
-    pc0 = create_stereo_point_cloud(frame_idx0, threshold)
-
-    left0_img, _ = read_images(frame_idx0)
-    left1_img, _ = read_images(frame_idx1)
-
-    kp_l0, kp_l1, matches = extract_and_match_features(left0_img, left1_img)
-
-    # Sort matches by distance (ascending) for PROSAC
-    matches = sorted(matches, key=lambda m: m.distance)
-
-    l0_pts, l1_pts = get_matched_points(kp_l0, kp_l1, matches)
-
-    pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common = \
-        find_common_points(pc0, l0_pts, l1_pts)
-
-    if len(pts_3d_common) < PNP_SAMPLE_SIZE:
-        return np.hstack((np.eye(3), np.zeros((3, 1)))), pc0
-
-    best_T, _ = ransac_pnp(
-        pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common,
-        K, P1, P2
-    )
-
-    if best_T is None:
-        return np.hstack((np.eye(3), np.zeros((3, 1)))), pc0
-
-    return best_T, pc0
-
-
-def read_ground_truth_poses(poses_path=POSES_PATH):
-    """
-    Reads the ground-truth extrinsic matrices from poses file.
-    Each line has 12 numbers = the 3x4 [R|t] matrix in row-major order.
-    """
-    poses = []
-    with open(poses_path, 'r') as f:
-        for line in f:
-            values = [float(x) for x in line.strip().split()]
-            if len(values) == 12:
-                poses.append(np.array(values).reshape(3, 4))
-    return poses
-
-
-def section_3_6():
-    """
-    Section 3.6: Track the full sequence.
-    """
-    print("--- Section 3.6 ---")
-
-    K, P1, P2 = get_k_and_p_matrices()
-
-    img_dir = SEQ_DIR / "image_0"
-    num_frames = len(list(img_dir.glob("*.png")))
-    print(f"Total frames in sequence: {num_frames}")
-
-    global_transform = np.eye(4)
-    trajectory = [np.array([0.0, 0.0, 0.0])]
-
-    start_time = time.time()
-
-    for i in range(num_frames - 1):
-        if i % 100 == 0:
-            print(f"  Processing frame {i}/{num_frames - 1} ...")
-
-        T_rel_3x4, _ = track_pair(i, i + 1, K, P1, P2)
-
-        T_rel = np.eye(4)
-        T_rel[:3, :] = T_rel_3x4
-
-        global_transform = T_rel @ global_transform
-
-        R_acc = global_transform[:3, :3]
-        t_acc = global_transform[:3, 3]
-        cam_position = -R_acc.T @ t_acc
-
-        trajectory.append(cam_position)
-
-    elapsed = time.time() - start_time
-    print(f"Tracking completed in {elapsed:.1f} seconds.")
-
-    trajectory = np.array(trajectory)
-
-    # --- Read ground truth ---
-    gt_poses = read_ground_truth_poses()
-    gt_locations = []
-    for pose in gt_poses:
-        R_gt = pose[:3, :3]
-        t_gt = pose[:3, 3]
-        C_gt = -R_gt.T @ t_gt
-        gt_locations.append(C_gt)
-    gt_locations = np.array(gt_locations)
-
-    # --- Plot trajectory ---
-    plt.figure(figsize=(10, 10))
-    plt.plot(trajectory[:, 0], trajectory[:, 2], 'b-', linewidth=1, label='Estimated')
-    plt.plot(gt_locations[:num_frames, 0], gt_locations[:num_frames, 2],
-             'r-', linewidth=1, label='Ground Truth')
-    plt.xlabel("X (meters)")
-    plt.ylabel("Z (meters)")
-    plt.title("Camera Trajectory – Top-Down View (left_0 coordinates)")
-    plt.legend()
-    plt.grid(True)
-    plt.axis('equal')
-    plt.tight_layout()
-    plt.show()
-
-
-# ==========================================================
-# MAIN EXECUTION
-# ==========================================================
-def main():
-    # Section 3.1
-    point_cloud_0, point_cloud_1 = section_3_1()
-
-    # Section 3.2
-    pts_left0, pts_left1, temporal_matches = section_3_2()
-
-    # Section 3.3
-    pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common, T_mat = \
-        section_3_3(point_cloud_0, pts_left0, pts_left1)
-
-    # Section 3.4
-    supporter_mask = section_3_4(
-        pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common, T_mat
-    )
-
-    # Section 3.5
-    best_T = section_3_5(
-        point_cloud_0, point_cloud_1,
-        pts_3d_common, pts_2d_l1_common, pts_2d_l0_common, pts_2d_r0_common
-    )
-
-    # Section 3.6
-    section_3_6()
 
 
 if __name__ == "__main__":
-    main()
+    start_time = time.time()
+
+    traj = track_sequence()
+    plot_trajectory(traj)
+
+    elapsed_seconds = time.time() - start_time
+    elapsed_minutes = int(elapsed_seconds // 60)
+    remaining_seconds = elapsed_seconds % 60
+
+    print(f"\nTotal execution time: {elapsed_minutes} minutes and {remaining_seconds:.2f} seconds.")

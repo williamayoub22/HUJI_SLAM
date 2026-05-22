@@ -7,7 +7,7 @@ from utils.features import extract_features
 
 
 KNN_NEIGHBORS = 2
-RATIO_THRESHOLD = 0.7
+RATIO_THRESHOLD = 0.75
 
 
 def match_features(
@@ -20,7 +20,7 @@ def match_features(
 
     For every descriptor in image 1, returns its k nearest neighbors in image 2.
     """
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
     return bf.knnMatch(des1, des2, k=k)
 
 
@@ -44,6 +44,20 @@ def filter_matches_ratio(
             rejected_matches.append(m)
 
     return good_matches, rejected_matches
+
+
+def match_and_filter(
+    des1: np.ndarray,
+    des2: np.ndarray,
+    ratio: float = RATIO_THRESHOLD,
+) -> List[cv2.DMatch]:
+    """
+    Matches descriptors and applies Lowe's ratio test in one step.
+    Returns only the good matches.
+    """
+    knn_matches = match_features(des1, des2)
+    good_matches, _ = filter_matches_ratio(knn_matches, ratio)
+    return good_matches
 
 
 def get_matched_points(
@@ -74,7 +88,6 @@ def extract_and_match_features(
     kp1, desc1 = extract_features(im1)
     kp2, desc2 = extract_features(im2)
 
-    knn_matches = match_features(desc1, desc2)
-    good_matches, _ = filter_matches_ratio(knn_matches, ratio)
+    good_matches = match_and_filter(desc1, desc2, ratio)
 
     return kp1, kp2, good_matches

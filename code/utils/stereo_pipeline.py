@@ -11,6 +11,7 @@ from utils.triangulation import custom_triangulation, triangulate_opencv
 
 
 DEVIATION_THRESHOLD = 2.0
+MAX_DEPTH = 300.0
 
 
 @dataclass
@@ -63,22 +64,23 @@ def get_inlier_points(
     return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
 
 
-def keep_positive_depth_points(
+def keep_valid_depth_points(
     points_3d: np.ndarray,
     left_pts: np.ndarray,
     right_pts: np.ndarray,
+    max_depth: float = MAX_DEPTH,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Keeps only triangulated points with positive depth.
-    Points with z <= 0 are behind the camera and are usually caused by
-    incorrect matches or invalid triangulation.
+    Keeps only triangulated points with positive depth and within max_depth.
+    Points with z <= 0 are behind the camera; points with z >= max_depth
+    amplify noise and hurt PnP estimation.
     """
-    positive_depth_mask = points_3d[:, 2] > 0
+    valid_mask = (points_3d[:, 2] > 0) & (points_3d[:, 2] < max_depth)
 
     return (
-        points_3d[positive_depth_mask],
-        left_pts[positive_depth_mask],
-        right_pts[positive_depth_mask],
+        points_3d[valid_mask],
+        left_pts[valid_mask],
+        right_pts[valid_mask],
     )
 
 
@@ -87,6 +89,7 @@ def create_stereo_point_cloud(
     threshold: float = DEVIATION_THRESHOLD,
     use_custom_triangulation: bool = False,
     reject_negative_depth: bool = True,
+    max_depth: float = MAX_DEPTH,
 ) -> StereoPointCloud:
     """
     Creates a 3D point cloud for one stereo pair.
@@ -95,7 +98,7 @@ def create_stereo_point_cloud(
     1. Load and match the left/right stereo images.
     2. Reject matches whose vertical deviation is too large.
     3. Triangulate the remaining matches.
-    4. Optionally reject triangulated points with non-positive depth.
+    4. Optionally reject triangulated points with non-positive depth or beyond max_depth.
     """
     P1, P2 = read_calib()
 
@@ -108,10 +111,11 @@ def create_stereo_point_cloud(
         points_3d = triangulate_opencv(P1, P2, left_inliers, right_inliers)
 
     if reject_negative_depth:
-        points_3d, left_inliers, right_inliers = keep_positive_depth_points(
+        points_3d, left_inliers, right_inliers = keep_valid_depth_points(
             points_3d,
             left_inliers,
             right_inliers,
+            max_depth,
         )
 
     return StereoPointCloud(
