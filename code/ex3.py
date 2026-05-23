@@ -2,7 +2,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3
+from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3, plot_task_3_4
 from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES
 from slam.pipeline.temporal_pipeline import match_left_frames
 from slam.features.detectors import FeatureType
@@ -11,6 +11,8 @@ from slam.visualization.visualization import plot_point_cloud_on_axis
 from slam.geometry.pnp import solve_pnp_safe
 from slam.geometry.correspondences import find_common_points
 from slam.io.calibration import read_calib
+from slam.geometry.projection import count_supporters
+from slam.geometry.correspondences import find_common_points
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
@@ -143,9 +145,62 @@ def section_3_3(
     return T_left0_to_left1
 
 
+def section_3_4(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    T_left0_to_left1: np.ndarray,
+    threshold: float = SUPPORTER_THRESHOLD_PIXELS,
+) -> np.ndarray:
+    """Counts and plots supporters of the transformation estimated in Section 3.3."""
+    print("--- Section 3.4 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    supporter_mask, errors = count_supporters(
+        T_left0_to_left1,
+        pts_3d,
+        pts_l0_c,
+        pts_r0_c,
+        pts_l1_c,
+        pts_r1_c,
+        K,
+        P1,
+        P2,
+        threshold,
+    )
+
+    num_supporters = int(np.sum(supporter_mask))
+    total_points = len(supporter_mask)
+    supporter_percentage = 100.0 * num_supporters / total_points if total_points > 0 else 0.0
+
+    print(f"Number of four-view matches: {total_points}")
+    print(f"Number of supporters: {num_supporters}")
+    print(f"Supporter percentage: {supporter_percentage:.2f}%")
+
+    plot_task_3_4(
+        point_cloud_0.data.left_img,
+        point_cloud_1.data.left_img,
+        pts_l0_c,
+        pts_l1_c,
+        supporter_mask,
+    )
+
+    return supporter_mask
+
 
 def main() -> None:
     point_cloud_0, point_cloud_1 = section_3_1()
+
     left0_pts, left1_pts, temporal_matches = section_3_2(
         point_cloud_0,
         point_cloud_1,
@@ -158,6 +213,13 @@ def main() -> None:
         left1_pts,
     )
 
+    supporter_mask = section_3_4(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+        T_left0_to_left1,
+    )
 
 if __name__ == "__main__":
     main()
