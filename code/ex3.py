@@ -6,10 +6,10 @@ from pathlib import Path
 from tqdm import tqdm
 
 from utils.image_loader import read_images
-from utils.features import extract_features
 from utils.matching import match_and_filter, get_matched_points
 from utils.read_cam_calib import read_calib
 from utils.stereo_pipeline import create_stereo_point_cloud
+from code.slam.features.detectors import extract_features
 
 # Updated import to include count_supporters and _safe_solvePnP for Task 3.4
 from utils.pnp import find_common_points, ransac_pnp, count_supporters, _safe_solvePnP
