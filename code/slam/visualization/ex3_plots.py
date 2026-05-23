@@ -244,3 +244,119 @@ def plot_task_3_4(
     plt.tight_layout()
     plt.show()
 
+def plot_task_3_5_matches(
+    left0_img: np.ndarray,
+    left1_img: np.ndarray,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    inlier_mask: np.ndarray,
+) -> None:
+    """Plots final RANSAC inliers and outliers on left_0 and left_1."""
+    inlier_mask = np.asarray(inlier_mask, dtype=bool).flatten()
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    axes[0].imshow(left0_img, cmap="gray")
+    axes[0].set_title("left_0")
+    axes[1].imshow(left1_img, cmap="gray")
+    axes[1].set_title("left_1")
+
+    inlier_idx = np.where(inlier_mask)[0]
+    outlier_idx = np.where(~inlier_mask)[0]
+
+    axes[0].scatter(
+        left0_pts[outlier_idx, 0],
+        left0_pts[outlier_idx, 1],
+        c="cyan",
+        s=15,
+        label="Outliers",
+    )
+    axes[1].scatter(
+        left1_pts[outlier_idx, 0],
+        left1_pts[outlier_idx, 1],
+        c="cyan",
+        s=15,
+        label="Outliers",
+    )
+
+    axes[0].scatter(
+        left0_pts[inlier_idx, 0],
+        left0_pts[inlier_idx, 1],
+        c="orange",
+        s=15,
+        label="Inliers",
+    )
+    axes[1].scatter(
+        left1_pts[inlier_idx, 0],
+        left1_pts[inlier_idx, 1],
+        c="orange",
+        s=15,
+        label="Inliers",
+    )
+
+    for ax in axes:
+        ax.axis("off")
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2)
+
+    plt.suptitle("Task 3.5: Final RANSAC Inliers and Outliers")
+    plt.tight_layout()
+    plt.show()
+
+def plot_task_3_5_point_clouds(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    T_left0_to_left1: np.ndarray,
+    max_depth: float,
+) -> None:
+    """Plots pair 1 and transformed pair 0 point clouds from a cropped top-down view."""
+    R = T_left0_to_left1[:3, :3]
+    t = T_left0_to_left1[:3, 3]
+
+    points0_transformed = (R @ point_cloud_0.points_3d.T).T + t
+    points1 = point_cloud_1.points_3d
+
+    mask0 = (
+        np.isfinite(points0_transformed).all(axis=1)
+        & (points0_transformed[:, 2] > 0)
+        & (points0_transformed[:, 2] < max_depth)
+    )
+    mask1 = (
+        np.isfinite(points1).all(axis=1)
+        & (points1[:, 2] > 0)
+        & (points1[:, 2] < max_depth)
+    )
+
+    points0_plot = points0_transformed[mask0]
+    points1_plot = points1[mask1]
+
+    if len(points0_plot) == 0 or len(points1_plot) == 0:
+        print("Cannot plot point clouds: one of the cropped clouds is empty.")
+        return
+
+    all_x = np.concatenate([points0_plot[:, 0], points1_plot[:, 0]])
+    all_z = np.concatenate([points0_plot[:, 2], points1_plot[:, 2]])
+
+    x_min, x_max = np.percentile(all_x, [1, 99])
+    z_min, z_max = np.percentile(all_z, [1, 99])
+
+    x_margin = 0.05 * max(x_max - x_min, 1.0)
+    z_margin = 0.05 * max(z_max - z_min, 1.0)
+
+    plt.figure(figsize=(10, 8))
+    plt.scatter(points0_plot[:, 0], points0_plot[:, 2], s=4, alpha=0.45, label="Pair 0 transformed")
+    plt.scatter(points1_plot[:, 0], points1_plot[:, 2], s=4, alpha=0.45, label="Pair 1")
+
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+    plt.ylim(z_min - z_margin, z_max + z_margin)
+    plt.title("Task 3.5: Point Clouds After Applying the Refined Transformation")
+    plt.xlabel("X")
+    plt.ylabel("Z")
+    # plt.axis("equal")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
