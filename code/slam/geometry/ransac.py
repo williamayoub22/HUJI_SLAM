@@ -2,8 +2,8 @@ import cv2
 import math
 import numpy as np
 
-from code.slam.geometry.pnp import solve_pnp_safe
-from code.slam.geometry.projection import count_supporters
+from .pnp import solve_pnp_safe
+from .projection import count_supporters
 
 MAX_RANSAC_ITERS = 200
 RANSAC_CONFIDENCE = 0.99
