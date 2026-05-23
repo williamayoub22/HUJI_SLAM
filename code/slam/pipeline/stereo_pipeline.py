@@ -37,9 +37,19 @@ class StereoPointCloud:
     points_3d: np.ndarray
 
 
-def load_frame_data(frame_idx: int) -> StereoMatchData:
+def load_frame_data(
+    frame_idx: int,
+    feature_type: str = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
+) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(frame_idx)
+    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(
+        frame_idx,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
     left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
 
@@ -90,6 +100,9 @@ def create_stereo_point_cloud(
     use_custom_triangulation: bool = False,
     reject_negative_depth: bool = False,
     max_depth: float = MAX_DEPTH,
+    feature_type: str = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
 ) -> StereoPointCloud:
     """
     Creates a 3D point cloud for one stereo pair.
@@ -102,7 +115,12 @@ def create_stereo_point_cloud(
     """
     P1, P2 = read_calib()
 
-    data = load_frame_data(frame_idx)
+    data = load_frame_data(
+        frame_idx,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
     left_inliers, right_inliers = get_inlier_points(data, threshold)
 
     if use_custom_triangulation:
