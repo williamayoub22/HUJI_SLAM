@@ -5,11 +5,11 @@ import time
 from pathlib import Path
 from tqdm import tqdm
 
-from utils.read_cam_calib import read_calib
 from utils.stereo_pipeline import create_stereo_point_cloud
 from code.slam.io.image_loader import read_images
 from code.slam.features.detectors import extract_features
 from code.slam.features.matching import match_and_filter, get_matched_points
+from code.slam.io.calibration import read_calib
 
 # Updated import to include count_supporters and _safe_solvePnP for Task 3.4
 from utils.pnp import find_common_points, ransac_pnp, count_supporters, _safe_solvePnP

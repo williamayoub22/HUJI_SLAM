@@ -3,8 +3,8 @@ from typing import Tuple, Union
 from pathlib import Path
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent.parent / "dataset" / "sequences" / "00"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BASE_DIR = PROJECT_ROOT / "dataset" / "sequences" / "00"
 DEFAULT_FILEPATH = BASE_DIR / "calib.txt"
 
 

@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from utils.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
-from utils.read_cam_calib import read_calib
 from utils.triangulation import custom_triangulation, triangulate_opencv
+from slam.io.calibration import read_calib
 
 FRAME_INDEX = 0
 DEFAULT_FRAMES = (0, 1, 2, 3)
