@@ -5,9 +5,9 @@ import time
 from pathlib import Path
 from tqdm import tqdm
 
-from utils.image_loader import read_images
 from utils.read_cam_calib import read_calib
 from utils.stereo_pipeline import create_stereo_point_cloud
+from code.slam.io.image_loader import read_images
 from code.slam.features.detectors import extract_features
 from code.slam.features.matching import match_and_filter, get_matched_points
 

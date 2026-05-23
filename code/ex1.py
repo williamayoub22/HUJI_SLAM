@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import random
 from typing import Tuple, List
 
-from utils.image_loader import read_images
 from slam.features.detectors import extract_features
 from slam.features.matching import match_features, filter_matches_ratio, RATIO_THRESHOLD
+from slam.io.image_loader import read_images
 
 # --- Algorithm Parameters ---
 NUM_FEATURES = 1000

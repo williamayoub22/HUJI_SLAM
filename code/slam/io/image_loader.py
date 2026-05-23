@@ -6,12 +6,13 @@ import numpy as np
 from typing import Tuple
 from pathlib import Path
 
-from utils.matching import extract_and_match_features
+from ..features.matching import extract_and_match_features
 
 FRAME_INDEX = 0
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent.parent / "dataset" / "sequences" / "00"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BASE_DIR = PROJECT_ROOT / "dataset" / "sequences" / "00"
+
 LEFT_IMG_DIR = 'image_0'
 RIGHT_IMG_DIR = 'image_1'
 IMG_FILENAME_FORMAT = '{:06d}.png'
