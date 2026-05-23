@@ -2,17 +2,18 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3, plot_task_3_4
+from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3, plot_task_3_4, \
+    plot_task_3_5_point_clouds, plot_task_3_5_matches
 from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES
 from slam.pipeline.temporal_pipeline import match_left_frames
 from slam.features.detectors import FeatureType
 from slam.pipeline.stereo_pipeline import create_stereo_point_cloud, StereoPointCloud
 from slam.visualization.visualization import plot_point_cloud_on_axis
 from slam.geometry.pnp import solve_pnp_safe
-from slam.geometry.correspondences import find_common_points
 from slam.io.calibration import read_calib
 from slam.geometry.projection import count_supporters
 from slam.geometry.correspondences import find_common_points
+from slam.geometry.ransac import ransac_pnp
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
@@ -125,7 +126,9 @@ def section_3_3(
     if len(pts_3d) < 4:
         raise RuntimeError("Need at least 4 common points for PnP.")
 
+    np.random.seed(0)
     indices = np.random.choice(len(pts_3d), 4, replace=False)
+    print(f"PnP sampled indices: {indices}")
 
     T_left0_to_left1 = solve_pnp_safe(
         pts_3d[indices],
@@ -197,6 +200,88 @@ def section_3_4(
 
     return supporter_mask
 
+def section_3_5(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    threshold: float = SUPPORTER_THRESHOLD_PIXELS,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Runs RANSAC with PnP as the inner model, refines the transformation using
+    all inliers, and plots the final inliers/outliers and transformed point clouds.
+    """
+    print("--- Section 3.5 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    T_ransac, inlier_mask = ransac_pnp(
+        pts_3d,
+        pts_l1_c,
+        pts_l0_c,
+        pts_r0_c,
+        pts_r1_c,
+        K,
+        P1,
+        P2,
+        # max_iters=MAX_RANSAC_ITERS,
+        # confidence=RANSAC_CONFIDENCE,
+        # supporter_thresh=threshold,
+        # max_translation=MAX_TRANSLATION,
+        # min_inliers=MIN_INLIERS,
+    )
+
+    if T_ransac is None or inlier_mask is None:
+        raise RuntimeError("RANSAC failed to find a valid PnP transformation.")
+
+    inlier_mask = np.asarray(inlier_mask, dtype=bool).flatten()
+    num_inliers = int(np.sum(inlier_mask))
+    num_outliers = len(inlier_mask) - num_inliers
+
+    print(f"Number of RANSAC inliers: {num_inliers}")
+    print(f"Number of RANSAC outliers: {num_outliers}")
+    print(f"Inlier percentage: {100.0 * num_inliers / len(inlier_mask):.2f}%")
+
+    # Refine T using all inliers, as required by the task.
+    T_refined = solve_pnp_safe(
+        pts_3d[inlier_mask],
+        pts_l1_c[inlier_mask],
+        K,
+        cv2.SOLVEPNP_EPNP,
+    )
+
+    if T_refined is None:
+        print("Refinement failed; using the best RANSAC transformation instead.")
+        T_refined = T_ransac
+
+    print("Refined transformation T:")
+    print(np.round(T_refined, 4))
+
+    plot_task_3_5_matches(
+        point_cloud_0.data.left_img,
+        point_cloud_1.data.left_img,
+        pts_l0_c,
+        pts_l1_c,
+        inlier_mask,
+    )
+
+    plot_task_3_5_point_clouds(
+        point_cloud_0,
+        point_cloud_1,
+        T_refined,
+        300.0
+    )
+
+    return T_refined, inlier_mask
+
 
 def main() -> None:
     point_cloud_0, point_cloud_1 = section_3_1()
@@ -213,13 +298,21 @@ def main() -> None:
         left1_pts,
     )
 
-    supporter_mask = section_3_4(
+    section_3_4(
         point_cloud_0,
         point_cloud_1,
         left0_pts,
         left1_pts,
         T_left0_to_left1,
     )
+
+    section_3_5(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
 
 if __name__ == "__main__":
     main()
