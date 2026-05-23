@@ -1,38 +1,48 @@
+import numpy as np
 
-def find_common_points(pc0, pc1, l0_pts, l1_pts):
+from ..pipeline.stereo_pipeline import StereoPointCloud
+
+
+def find_common_points(
+    pc0: StereoPointCloud,
+    pc1: StereoPointCloud,
+    l0_pts: np.ndarray,
+    l1_pts: np.ndarray,
+    tolerance: float = 1e-3,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Finds points existing in both stereo point clouds and temporal matches.
+    Finds points observed in all four images: left_0, right_0, left_1, right_1.
 
-    Args:
-        pc0: StereoPointCloud for pair 0
-        pc1: StereoPointCloud for pair 1
-        l0_pts: Nx2 temporal match points on previous left image (left_0)
-        l1_pts: Nx2 temporal match points on current left image (left_1)
-
-    Returns:
-        pts_3d: common 3D points from stereo pair 0 triangulation
-        pts_l1: corresponding 2D points on left_1
-        pts_l0: corresponding 2D points on left_0
-        pts_r0: corresponding 2D points on right_0
-        pts_r1: corresponding 2D points on right_1
+    pc0 gives the 3D point from stereo pair 0, together with its left_0/right_0 pixels.
+    The temporal matches give left_0 <-> left_1.
+    pc1 verifies that the left_1 point also has a stereo match to right_1.
     """
-    # Map 2D point locations to their index in the respective point clouds
-    stereo0_dict = {(float(pt[0]), float(pt[1])): i for i, pt in enumerate(pc0.left_inliers)}
-    stereo1_dict = {(float(pt[0]), float(pt[1])): i for i, pt in enumerate(pc1.left_inliers)}
+    pts_3d = []
+    pts_l0 = []
+    pts_r0 = []
+    pts_l1 = []
+    pts_r1 = []
 
-    idx_temporal, idx_stereo0, idx_stereo1 = [], [], []
-    for i, (pt0, pt1) in enumerate(zip(l0_pts, l1_pts)):
-        key0 = (float(pt0[0]), float(pt0[1]))
-        key1 = (float(pt1[0]), float(pt1[1]))
+    for temporal_idx, l0_pt in enumerate(l0_pts):
+        l1_pt = l1_pts[temporal_idx]
 
-        # Keep only key-points matched on all four images
-        if key0 in stereo0_dict and key1 in stereo1_dict:
-            idx_temporal.append(i)
-            idx_stereo0.append(stereo0_dict[key0])
-            idx_stereo1.append(stereo1_dict[key1])
+        dist0 = np.linalg.norm(pc0.left_inliers - l0_pt, axis=1)
+        idx0 = int(np.argmin(dist0))
 
-    return (pc0.points_3d[idx_stereo0],
-            l1_pts[idx_temporal],
-            l0_pts[idx_temporal],
-            pc0.right_inliers[idx_stereo0],
-            pc1.right_inliers[idx_stereo1])
+        dist1 = np.linalg.norm(pc1.left_inliers - l1_pt, axis=1)
+        idx1 = int(np.argmin(dist1))
+
+        if dist0[idx0] <= tolerance and dist1[idx1] <= tolerance:
+            pts_3d.append(pc0.points_3d[idx0])
+            pts_l0.append(pc0.left_inliers[idx0])
+            pts_r0.append(pc0.right_inliers[idx0])
+            pts_l1.append(pc1.left_inliers[idx1])
+            pts_r1.append(pc1.right_inliers[idx1])
+
+    return (
+        np.asarray(pts_3d, dtype=np.float64),
+        np.asarray(pts_l1, dtype=np.float64),
+        np.asarray(pts_l0, dtype=np.float64),
+        np.asarray(pts_r0, dtype=np.float64),
+        np.asarray(pts_r1, dtype=np.float64),
+    )
