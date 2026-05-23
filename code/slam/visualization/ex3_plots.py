@@ -183,3 +183,64 @@ def plot_task_3_3(T, P1, P2):
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+
+def plot_task_3_4(
+    left0_img: np.ndarray,
+    left1_img: np.ndarray,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    supporter_mask: np.ndarray,
+) -> None:
+    """Plots left_0 and left_1 matches, with supporters highlighted."""
+    supporter_mask = np.asarray(supporter_mask, dtype=bool).flatten()
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    axes[0].imshow(left0_img, cmap="gray")
+    axes[0].set_title("left_0")
+    axes[1].imshow(left1_img, cmap="gray")
+    axes[1].set_title("left_1")
+
+    supporter_idx = np.where(supporter_mask)[0]
+
+    axes[0].scatter(
+        left0_pts[:, 0],
+        left0_pts[:, 1],
+        c="cyan",
+        s=15,
+        label="Matches",
+    )
+    axes[1].scatter(
+        left1_pts[:, 0],
+        left1_pts[:, 1],
+        c="cyan",
+        s=15,
+        label="Matches",
+    )
+
+    axes[0].scatter(
+        left0_pts[supporter_idx, 0],
+        left0_pts[supporter_idx, 1],
+        c="orange",
+        s=20,
+        label="Supporters",
+    )
+    axes[1].scatter(
+        left1_pts[supporter_idx, 0],
+        left1_pts[supporter_idx, 1],
+        c="orange",
+        s=20,
+        label="Supporters",
+    )
+
+    for ax in axes:
+        ax.axis("off")
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2)
+
+    plt.suptitle("Task 3.4: Matches and Supporters of the PnP Transformation")
+    plt.tight_layout()
+    plt.show()
+
