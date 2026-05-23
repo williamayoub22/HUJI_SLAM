@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
+from slam.visualization.trajectory import plot_trajectory
+from slam.io.poses import read_ground_truth_poses
+from slam.pipeline.tracking_pipeline import track_sequence
 from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3, plot_task_3_4, \
     plot_task_3_5_point_clouds, plot_task_3_5_matches
 from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES
@@ -22,6 +27,8 @@ COMMON_POINT_TOLERANCE = 1e-3
 SUPPORTER_THRESHOLD_PIXELS = 2.0
 PNP_NUM_POINTS = 4
 FEATURE_TYPE: FeatureType = "orb"
+SEQ_DIR = Path(__file__).resolve().parent.parent / "dataset" / "sequences" / "00"
+POSES_PATH = Path(__file__).resolve().parent.parent / "dataset" / "poses" / "00.txt"
 
 
 def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
@@ -282,6 +289,23 @@ def section_3_5(
 
     return T_refined, inlier_mask
 
+def section_3_6() -> None:
+    print("--- Section 3.6 ---")
+
+    estimated_positions, relative_transforms, elapsed_time = track_sequence(
+        sequence_dir=SEQ_DIR,
+        num_frames=None,
+        feature_type=FEATURE_TYPE,
+        num_features=3000,
+        use_ratio_test=True,
+    )
+
+    gt_poses = read_ground_truth_poses(POSES_PATH)
+
+    print(f"Tracking took {elapsed_time:.2f} seconds")
+    print(f"Estimated {len(relative_transforms)} relative transformations")
+    plot_trajectory(estimated_positions, gt_poses)
+
 
 def main() -> None:
     point_cloud_0, point_cloud_1 = section_3_1()
@@ -312,6 +336,8 @@ def main() -> None:
         left0_pts,
         left1_pts,
     )
+
+    section_3_6()
 
 
 if __name__ == "__main__":
