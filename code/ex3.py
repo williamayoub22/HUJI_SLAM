@@ -2,12 +2,15 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.visualization.ex3_plots import plot_four_image_matches
+from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3
 from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES
 from slam.pipeline.temporal_pipeline import match_left_frames
 from slam.features.detectors import FeatureType
 from slam.pipeline.stereo_pipeline import create_stereo_point_cloud, StereoPointCloud
 from slam.visualization.visualization import plot_point_cloud_on_axis
+from slam.geometry.pnp import solve_pnp_safe
+from slam.geometry.correspondences import find_common_points
+from slam.io.calibration import read_calib
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
@@ -97,6 +100,47 @@ def section_3_2(
 
     return temporal_data.left0_pts, temporal_data.left1_pts, temporal_data.matches
 
+def section_3_3(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+) -> np.ndarray:
+    print("--- Section 3.3 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    print(f"Number of points matched in all four images: {len(pts_3d)}")
+
+    if len(pts_3d) < 4:
+        raise RuntimeError("Need at least 4 common points for PnP.")
+
+    indices = np.random.choice(len(pts_3d), 4, replace=False)
+
+    T_left0_to_left1 = solve_pnp_safe(
+        pts_3d[indices],
+        pts_l1_c[indices],
+        K,
+        cv2.SOLVEPNP_EPNP,
+    )
+
+    if T_left0_to_left1 is None:
+        raise RuntimeError("PnP failed.")
+
+    print("Estimated extrinsic matrix [R | t]:")
+    print(np.round(T_left0_to_left1, 4))
+
+    plot_task_3_3(T_left0_to_left1, P1, P2)
+
+    return T_left0_to_left1
 
 
 
@@ -107,6 +151,12 @@ def main() -> None:
         point_cloud_1,
     )
 
+    T_left0_to_left1 = section_3_3(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
 
 
 if __name__ == "__main__":
