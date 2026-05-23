@@ -6,12 +6,13 @@ import numpy as np
 from typing import Tuple
 from pathlib import Path
 
-from utils.matching import extract_and_match_features
+from ..features.matching import extract_and_match_features
 
 FRAME_INDEX = 0
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent.parent / "dataset" / "sequences" / "00"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BASE_DIR = PROJECT_ROOT / "dataset" / "sequences" / "00"
+
 LEFT_IMG_DIR = 'image_0'
 RIGHT_IMG_DIR = 'image_1'
 IMG_FILENAME_FORMAT = '{:06d}.png'
@@ -33,16 +34,29 @@ def read_images(idx: int = FRAME_INDEX) -> Tuple[np.ndarray, np.ndarray]:
     return img1, img2
 
 
-def load_matches_between_images(frame_idx):
+def load_matches_between_images(
+    frame_idx: int,
+    feature_type: str = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
+):
     """
     Loads a stereo image pair, extracts features, and computes feature matches.
 
     Returns:
         kp_left, kp_right: Detected keypoints.
         left_img, right_img: Stereo images.
-        matches: Best feature matches between the images.
+        matches: Feature matches between the images.
     """
     left_img, right_img = read_images(frame_idx)
-    kp_left, kp_right, matches = extract_and_match_features(left_img, right_img)
+
+    kp_left, kp_right, matches = extract_and_match_features(
+        left_img,
+        right_img,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
+
     return kp_left, kp_right, left_img, matches, right_img
 

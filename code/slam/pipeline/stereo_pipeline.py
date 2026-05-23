@@ -4,13 +4,14 @@ from typing import List
 import cv2
 import numpy as np
 
-from utils.image_loader import load_matches_between_images
-from utils.matching import get_matched_points
-from utils.read_cam_calib import read_calib
-from utils.triangulation import custom_triangulation, triangulate_opencv
+from ..io.image_loader import load_matches_between_images
+from ..features.matching import get_matched_points
+from ..io.calibration import read_calib
+from ..geometry.triangulation import custom_triangulation, triangulate_opencv
 
 
 DEVIATION_THRESHOLD = 2.0
+MAX_DEPTH = 300.0
 
 
 @dataclass
@@ -36,9 +37,19 @@ class StereoPointCloud:
     points_3d: np.ndarray
 
 
-def load_frame_data(frame_idx: int) -> StereoMatchData:
+def load_frame_data(
+    frame_idx: int,
+    feature_type: str = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
+) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(frame_idx)
+    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(
+        frame_idx,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
     left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
 
@@ -63,22 +74,23 @@ def get_inlier_points(
     return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
 
 
-def keep_positive_depth_points(
+def keep_valid_depth_points(
     points_3d: np.ndarray,
     left_pts: np.ndarray,
     right_pts: np.ndarray,
+    max_depth: float = MAX_DEPTH,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Keeps only triangulated points with positive depth.
-    Points with z <= 0 are behind the camera and are usually caused by
-    incorrect matches or invalid triangulation.
+    Keeps only triangulated points with positive depth and within max_depth.
+    Points with z <= 0 are behind the camera; points with z >= max_depth
+    amplify noise and hurt PnP estimation.
     """
-    positive_depth_mask = points_3d[:, 2] > 0
+    valid_mask = (points_3d[:, 2] > 0) & (points_3d[:, 2] < max_depth)
 
     return (
-        points_3d[positive_depth_mask],
-        left_pts[positive_depth_mask],
-        right_pts[positive_depth_mask],
+        points_3d[valid_mask],
+        left_pts[valid_mask],
+        right_pts[valid_mask],
     )
 
 
@@ -86,7 +98,11 @@ def create_stereo_point_cloud(
     frame_idx: int,
     threshold: float = DEVIATION_THRESHOLD,
     use_custom_triangulation: bool = False,
-    reject_negative_depth: bool = True,
+    reject_negative_depth: bool = False,
+    max_depth: float = MAX_DEPTH,
+    feature_type: str = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
 ) -> StereoPointCloud:
     """
     Creates a 3D point cloud for one stereo pair.
@@ -95,11 +111,16 @@ def create_stereo_point_cloud(
     1. Load and match the left/right stereo images.
     2. Reject matches whose vertical deviation is too large.
     3. Triangulate the remaining matches.
-    4. Optionally reject triangulated points with non-positive depth.
+    4. Optionally reject triangulated points with non-positive depth or beyond max_depth.
     """
     P1, P2 = read_calib()
 
-    data = load_frame_data(frame_idx)
+    data = load_frame_data(
+        frame_idx,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
     left_inliers, right_inliers = get_inlier_points(data, threshold)
 
     if use_custom_triangulation:
@@ -108,10 +129,11 @@ def create_stereo_point_cloud(
         points_3d = triangulate_opencv(P1, P2, left_inliers, right_inliers)
 
     if reject_negative_depth:
-        points_3d, left_inliers, right_inliers = keep_positive_depth_points(
+        points_3d, left_inliers, right_inliers = keep_valid_depth_points(
             points_3d,
             left_inliers,
             right_inliers,
+            max_depth,
         )
 
     return StereoPointCloud(

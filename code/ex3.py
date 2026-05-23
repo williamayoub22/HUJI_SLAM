@@ -1,21 +1,37 @@
+from pathlib import Path
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils.image_loader import read_images
-from utils.matching import extract_and_match_features, get_matched_points
-from utils.visualization import plot_point_cloud_on_axis
-from utils.stereo_pipeline import StereoMatchData, StereoPointCloud, DEVIATION_THRESHOLD, compute_rejection_statistics
-from utils.stereo_pipeline import create_stereo_point_cloud
+from slam.visualization.trajectory import plot_trajectory
+from slam.io.poses import read_ground_truth_poses
+from slam.pipeline.tracking_pipeline import track_sequence
+from slam.visualization.ex3_plots import plot_four_image_matches, plot_task_3_3, plot_task_3_4, \
+    plot_task_3_5_point_clouds, plot_task_3_5_matches
+from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES
+from slam.pipeline.temporal_pipeline import match_left_frames
+from slam.features.detectors import FeatureType
+from slam.pipeline.stereo_pipeline import create_stereo_point_cloud, StereoPointCloud
+from slam.visualization.visualization import plot_point_cloud_on_axis
+from slam.geometry.pnp import solve_pnp_safe
+from slam.io.calibration import read_calib
+from slam.geometry.projection import count_supporters
+from slam.geometry.correspondences import find_common_points
+from slam.geometry.ransac import ransac_pnp
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
-NUM_TEMPORAL_MATCHES_TO_DRAW = 200
+
+COMMON_POINT_TOLERANCE = 1e-3
+SUPPORTER_THRESHOLD_PIXELS = 2.0
+PNP_NUM_POINTS = 4
+FEATURE_TYPE: FeatureType = "orb"
+SEQ_DIR = Path(__file__).resolve().parent.parent / "dataset" / "sequences" / "00"
+POSES_PATH = Path(__file__).resolve().parent.parent / "dataset" / "poses" / "00.txt"
 
 
-def section_3_1(
-    threshold: float = DEVIATION_THRESHOLD,
-) -> tuple[StereoPointCloud, StereoPointCloud]:
+def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
     """
     Section 3.1:
     Creates point clouds for stereo pair 0 and stereo pair 1.
@@ -27,8 +43,21 @@ def section_3_1(
     """
     print("--- Section 3.1 ---")
 
-    point_cloud_0 = create_stereo_point_cloud(FRAME_0_INDEX, threshold)
-    point_cloud_1 = create_stereo_point_cloud(FRAME_1_INDEX, threshold)
+    point_cloud_0 = create_stereo_point_cloud(
+        FRAME_0_INDEX,
+        reject_negative_depth=True,
+        feature_type="orb",
+        num_features=3000,
+        use_ratio_test=True,
+    )
+
+    point_cloud_1 = create_stereo_point_cloud(
+        FRAME_1_INDEX,
+        reject_negative_depth=True,
+        feature_type = "orb",
+        num_features = 3000,
+        use_ratio_test=True
+    )
 
     fig = plt.figure(figsize=(16, 7))
 
@@ -54,59 +83,9 @@ def section_3_1(
     return point_cloud_0, point_cloud_1
 
 
-def plot_temporal_left_matches(
-    left0_img: np.ndarray,
-    kp_left0: list[cv2.KeyPoint],
-    left1_img: np.ndarray,
-    kp_left1: list[cv2.KeyPoint],
-    matches: list[cv2.DMatch],
-    num_to_draw: int = NUM_TEMPORAL_MATCHES_TO_DRAW,
-) -> None:
-    """Plots feature matches between left_0 and left_1."""
-    matches_to_draw = matches[: min(num_to_draw, len(matches))]
-
-    if left0_img.ndim == 2:
-        left0_vis = cv2.cvtColor(left0_img, cv2.COLOR_GRAY2RGB)
-    else:
-        left0_vis = cv2.cvtColor(left0_img, cv2.COLOR_BGR2RGB)
-
-    if left1_img.ndim == 2:
-        left1_vis = cv2.cvtColor(left1_img, cv2.COLOR_GRAY2RGB)
-    else:
-        left1_vis = cv2.cvtColor(left1_img, cv2.COLOR_BGR2RGB)
-
-    h0, w0 = left0_vis.shape[:2]
-    h1, w1 = left1_vis.shape[:2]
-
-    canvas_width = max(w0, w1)
-    canvas_height = h0 + h1
-
-    canvas = np.zeros((canvas_height, canvas_width, 3), dtype=left0_vis.dtype)
-    canvas[:h0, :w0] = left0_vis
-    canvas[h0:h0 + h1, :w1] = left1_vis
-
-    plt.figure(figsize=(10, 12))
-    plt.imshow(canvas)
-    plt.axis("off")
-    plt.title("Temporal feature matches between left_0 and left_1")
-
-    for match in matches_to_draw:
-        x0, y0 = kp_left0[match.queryIdx].pt
-        x1, y1 = kp_left1[match.trainIdx].pt
-
-        # left1 is drawn below left0, so shift its y-coordinate by h0
-        y1_shifted = y1 + h0
-
-        plt.scatter([x0, x1], [y0, y1_shifted], s=20)
-        plt.plot([x0, x1], [y0, y1_shifted], linewidth=1)
-
-    plt.tight_layout()
-    plt.show()
-
-
 def section_3_2(
-    frame_idx0: int = FRAME_0_INDEX,
-    frame_idx1: int = FRAME_1_INDEX,
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
 ) -> tuple[np.ndarray, np.ndarray, list[cv2.DMatch]]:
     """
     Section 3.2:
@@ -114,35 +93,251 @@ def section_3_2(
     """
     print("--- Section 3.2 ---")
 
-    left0_img, _ = read_images(frame_idx0)
-    left1_img, _ = read_images(frame_idx1)
-
-    kp_left0, kp_left1, matches = extract_and_match_features(left0_img, left1_img)
-
-    left0_pts, left1_pts = get_matched_points(kp_left0, kp_left1, matches)
-
-    print(f"Number of ratio-test matches between left_{frame_idx0} and left_{frame_idx1}: {len(matches)}")
-
-    plot_temporal_left_matches(
-        left0_img,
-        kp_left0,
-        left1_img,
-        kp_left1,
-        matches,
+    temporal_data = match_left_frames(
+        FRAME_0_INDEX,
+        FRAME_1_INDEX,
+        feature_type=FEATURE_TYPE,
+        num_features=DEFAULT_ORB_NUM_FEATURES,
+        use_ratio_test=True,
     )
 
-    return left0_pts, left1_pts, matches
+    print(
+        f"Number of ratio-test matches between "
+        f"left_{FRAME_0_INDEX} and left_{FRAME_1_INDEX}: {len(temporal_data.matches)}"
+    )
+
+    plot_four_image_matches(point_cloud_0, point_cloud_1, temporal_data)
+
+    return temporal_data.left0_pts, temporal_data.left1_pts, temporal_data.matches
+
+def section_3_3(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+) -> np.ndarray:
+    print("--- Section 3.3 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    print(f"Number of points matched in all four images: {len(pts_3d)}")
+
+    if len(pts_3d) < 4:
+        raise RuntimeError("Need at least 4 common points for PnP.")
+
+    np.random.seed(0)
+    indices = np.random.choice(len(pts_3d), 4, replace=False)
+    print(f"PnP sampled indices: {indices}")
+
+    T_left0_to_left1 = solve_pnp_safe(
+        pts_3d[indices],
+        pts_l1_c[indices],
+        K,
+        cv2.SOLVEPNP_EPNP,
+    )
+
+    if T_left0_to_left1 is None:
+        raise RuntimeError("PnP failed.")
+
+    print("Estimated extrinsic matrix [R | t]:")
+    print(np.round(T_left0_to_left1, 4))
+
+    plot_task_3_3(T_left0_to_left1, P1, P2)
+
+    return T_left0_to_left1
+
+
+def section_3_4(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    T_left0_to_left1: np.ndarray,
+    threshold: float = SUPPORTER_THRESHOLD_PIXELS,
+) -> np.ndarray:
+    """Counts and plots supporters of the transformation estimated in Section 3.3."""
+    print("--- Section 3.4 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    supporter_mask, errors = count_supporters(
+        T_left0_to_left1,
+        pts_3d,
+        pts_l0_c,
+        pts_r0_c,
+        pts_l1_c,
+        pts_r1_c,
+        K,
+        P1,
+        P2,
+        threshold,
+    )
+
+    num_supporters = int(np.sum(supporter_mask))
+    total_points = len(supporter_mask)
+    supporter_percentage = 100.0 * num_supporters / total_points if total_points > 0 else 0.0
+
+    print(f"Number of four-view matches: {total_points}")
+    print(f"Number of supporters: {num_supporters}")
+    print(f"Supporter percentage: {supporter_percentage:.2f}%")
+
+    plot_task_3_4(
+        point_cloud_0.data.left_img,
+        point_cloud_1.data.left_img,
+        pts_l0_c,
+        pts_l1_c,
+        supporter_mask,
+    )
+
+    return supporter_mask
+
+def section_3_5(
+    point_cloud_0: StereoPointCloud,
+    point_cloud_1: StereoPointCloud,
+    left0_pts: np.ndarray,
+    left1_pts: np.ndarray,
+    threshold: float = SUPPORTER_THRESHOLD_PIXELS,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Runs RANSAC with PnP as the inner model, refines the transformation using
+    all inliers, and plots the final inliers/outliers and transformed point clouds.
+    """
+    print("--- Section 3.5 ---")
+
+    P1, P2 = read_calib()
+    K = P1[:, :3]
+
+    pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    T_ransac, inlier_mask = ransac_pnp(
+        pts_3d,
+        pts_l1_c,
+        pts_l0_c,
+        pts_r0_c,
+        pts_r1_c,
+        K,
+        P1,
+        P2,
+        # max_iters=MAX_RANSAC_ITERS,
+        # confidence=RANSAC_CONFIDENCE,
+        # supporter_thresh=threshold,
+        # max_translation=MAX_TRANSLATION,
+        # min_inliers=MIN_INLIERS,
+    )
+
+    if T_ransac is None or inlier_mask is None:
+        raise RuntimeError("RANSAC failed to find a valid PnP transformation.")
+
+    inlier_mask = np.asarray(inlier_mask, dtype=bool).flatten()
+    num_inliers = int(np.sum(inlier_mask))
+    num_outliers = len(inlier_mask) - num_inliers
+
+    print(f"Number of RANSAC inliers: {num_inliers}")
+    print(f"Number of RANSAC outliers: {num_outliers}")
+    print(f"Inlier percentage: {100.0 * num_inliers / len(inlier_mask):.2f}%")
+
+    # Refine T using all inliers, as required by the task.
+    T_refined = solve_pnp_safe(
+        pts_3d[inlier_mask],
+        pts_l1_c[inlier_mask],
+        K,
+        cv2.SOLVEPNP_EPNP,
+    )
+
+    if T_refined is None:
+        print("Refinement failed; using the best RANSAC transformation instead.")
+        T_refined = T_ransac
+
+    print("Refined transformation T:")
+    print(np.round(T_refined, 4))
+
+    plot_task_3_5_matches(
+        point_cloud_0.data.left_img,
+        point_cloud_1.data.left_img,
+        pts_l0_c,
+        pts_l1_c,
+        inlier_mask,
+    )
+
+    plot_task_3_5_point_clouds(
+        point_cloud_0,
+        point_cloud_1,
+        T_refined,
+        300.0
+    )
+
+    return T_refined, inlier_mask
+
+def section_3_6() -> None:
+    print("--- Section 3.6 ---")
+
+    estimated_positions, relative_transforms, elapsed_time = track_sequence(
+        sequence_dir=SEQ_DIR,
+        num_frames=None,
+        feature_type=FEATURE_TYPE,
+        num_features=3000,
+        use_ratio_test=True,
+    )
+
+    gt_poses = read_ground_truth_poses(POSES_PATH)
+
+    print(f"Tracking took {elapsed_time:.2f} seconds")
+    print(f"Estimated {len(relative_transforms)} relative transformations")
+    plot_trajectory(estimated_positions, gt_poses)
 
 
 def main() -> None:
     point_cloud_0, point_cloud_1 = section_3_1()
-    left0_pts, left1_pts, temporal_matches = section_3_2()
 
-    # These will be useful for the next sections:
-    # point_cloud_0.left_inliers  - left image points in frame 0
-    # point_cloud_0.points_3d     - triangulated 3D points from frame 0
-    # point_cloud_1.left_inliers  - left image points in frame 1
-    # point_cloud_1.points_3d     - triangulated 3D points from frame 1
+    left0_pts, left1_pts, temporal_matches = section_3_2(
+        point_cloud_0,
+        point_cloud_1,
+    )
+
+    T_left0_to_left1 = section_3_3(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    section_3_4(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+        T_left0_to_left1,
+    )
+
+    section_3_5(
+        point_cloud_0,
+        point_cloud_1,
+        left0_pts,
+        left1_pts,
+    )
+
+    section_3_6()
 
 
 if __name__ == "__main__":
