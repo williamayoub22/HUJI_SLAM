@@ -4,8 +4,8 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
 from utils.triangulation import custom_triangulation, triangulate_opencv
+from slam.pipeline.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
 from slam.io.calibration import read_calib
 
 FRAME_INDEX = 0
