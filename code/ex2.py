@@ -4,9 +4,9 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
-from utils.triangulation import custom_triangulation, triangulate_opencv
 from slam.pipeline.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
 from slam.io.calibration import read_calib
+from slam.geometry.triangulation import custom_triangulation, triangulate_opencv
 
 FRAME_INDEX = 0
 DEFAULT_FRAMES = (0, 1, 2, 3)
