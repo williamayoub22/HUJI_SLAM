@@ -212,7 +212,6 @@ def section_3_5(
     point_cloud_1: StereoPointCloud,
     left0_pts: np.ndarray,
     left1_pts: np.ndarray,
-    threshold: float = SUPPORTER_THRESHOLD_PIXELS,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Runs RANSAC with PnP as the inner model, refines the transformation using
@@ -239,11 +238,6 @@ def section_3_5(
         K,
         P1,
         P2,
-        # max_iters=MAX_RANSAC_ITERS,
-        # confidence=RANSAC_CONFIDENCE,
-        # supporter_thresh=threshold,
-        # max_translation=MAX_TRANSLATION,
-        # min_inliers=MIN_INLIERS,
     )
 
     if T_ransac is None or inlier_mask is None:
@@ -257,7 +251,6 @@ def section_3_5(
     print(f"Number of RANSAC outliers: {num_outliers}")
     print(f"Inlier percentage: {100.0 * num_inliers / len(inlier_mask):.2f}%")
 
-    # Refine T using all inliers, as required by the task.
     T_refined = solve_pnp_safe(
         pts_3d[inlier_mask],
         pts_l1_c[inlier_mask],
