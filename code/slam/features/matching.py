@@ -85,12 +85,16 @@ def extract_and_match_features(
     feature_type: FeatureType = "sift",
     num_features: int | None = None,
     ratio_threshold: float = RATIO_THRESHOLD,
+    use_ratio_test: bool = False,
 ) -> Tuple[List[cv2.KeyPoint], List[cv2.KeyPoint], List[cv2.DMatch]]:
     """Extract SIFT/ORB features from two images and return ratio-filtered matches."""
     kp1, des1 = extract_features(img1, feature_type=feature_type, num_features=num_features)
     kp2, des2 = extract_features(img2, feature_type=feature_type, num_features=num_features)
 
     knn_matches = match_features(des1, des2, feature_type=feature_type)
-    good_matches, _ = filter_matches_ratio(knn_matches, ratio_threshold)
+    if use_ratio_test:
+        good_matches, _ = filter_matches_ratio(knn_matches, ratio_threshold)
+        return kp1, kp2, good_matches
 
-    return kp1, kp2, good_matches
+    best_matches = [neighbors[0] for neighbors in knn_matches if len(neighbors) > 0]
+    return kp1, kp2, best_matches

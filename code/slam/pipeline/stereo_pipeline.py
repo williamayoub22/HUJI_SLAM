@@ -88,7 +88,7 @@ def create_stereo_point_cloud(
     frame_idx: int,
     threshold: float = DEVIATION_THRESHOLD,
     use_custom_triangulation: bool = False,
-    reject_negative_depth: bool = True,
+    reject_negative_depth: bool = False,
     max_depth: float = MAX_DEPTH,
 ) -> StereoPointCloud:
     """
