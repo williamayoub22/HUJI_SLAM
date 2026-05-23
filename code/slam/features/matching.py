@@ -3,7 +3,7 @@ import numpy as np
 
 from typing import Sequence, List, Tuple
 
-from utils.features import extract_features
+from .detectors import extract_features
 
 
 KNN_NEIGHBORS = 2
