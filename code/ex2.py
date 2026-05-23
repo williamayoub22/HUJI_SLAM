@@ -4,9 +4,9 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.pipeline.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
-from slam.io.calibration import read_calib
 from slam.geometry.triangulation import custom_triangulation, triangulate_opencv
+from slam.io.calibration import read_calib
+from slam.pipeline.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
 from slam.visualization.visualization import plot_point_cloud_on_axis
 
 FRAME_INDEX = 0
