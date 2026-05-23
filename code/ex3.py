@@ -12,7 +12,7 @@ from code.slam.io.calibration import read_calib
 from code.slam.pipeline.stereo_pipeline import create_stereo_point_cloud
 
 # Updated import to include count_supporters and _safe_solvePnP for Task 3.4
-from utils.pnp import find_common_points, ransac_pnp, count_supporters, _safe_solvePnP
+from code.slam.geometry.pnp import find_common_points, ransac_pnp, count_supporters, _safe_solvePnP
 
 # --- Hyperparameters ---
 FRAME_0, FRAME_1 = 0, 1
