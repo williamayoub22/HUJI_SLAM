@@ -295,7 +295,7 @@ class TrackingDB:
 
         # go over all matches to previous frame:
         is_knn = type(matches_to_previous_left[0]) is tuple
-        prev_matches = [MatchLocation()] * feat_num
+        prev_matches = [MatchLocation() for _ in range(feat_num)]
         for m, inlier in zip(matches_to_previous_left, inliers):
             if not inlier:
                 continue
