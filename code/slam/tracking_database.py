@@ -295,7 +295,7 @@ class TrackingDB:
 
         # go over all matches to previous frame:
         is_knn = type(matches_to_previous_left[0]) is tuple
-        prev_matches = [MatchLocation()] * feat_num
+        prev_matches = [MatchLocation() for _ in range(feat_num)]
         for m, inlier in zip(matches_to_previous_left, inliers):
             if not inlier:
                 continue
@@ -333,6 +333,22 @@ class TrackingDB:
 
         self.prev_frame_links = links
         return cur_frameId
+
+    """ length of trackId, i.e. the number of frames in which it appears """
+    def track_length(self, trackId: int) -> int:
+        return len(self.frames(trackId))
+
+    """ all valid trackIds with length at least min_length """
+    def tracks_with_min_length(self, min_length: int) -> List[int]:
+        return [trackId for trackId in self.all_tracks()
+                if self.track_length(trackId) >= min_length]
+
+    """ the feature location triplet (x_left, x_right, y) of trackId on frameId """
+    def link_triplet(self, frameId: int, trackId: int) -> Tuple[float, float, float]:
+        link = self.link(frameId, trackId)
+        if link is None:
+            raise KeyError(f"Track {trackId} does not appear in frame {frameId}")
+        return link.x_left, link.x_right, link.y
 
     """ save TrackingDB to base_filename+'.pkl' file. """
     def serialize(self, base_filename):
