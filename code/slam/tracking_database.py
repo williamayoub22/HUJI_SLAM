@@ -343,6 +343,17 @@ class TrackingDB:
         return [trackId for trackId in self.all_tracks()
                 if self.track_length(trackId) >= min_length]
 
+    """
+    Returns the first track whose length is in [min_length, max_length],
+    or None if no such track exists.
+    """
+    def first_track_with_length_range(self, min_length: int, max_length: int):
+        for track_id in self.all_tracks():
+            length = self.track_length(track_id)
+            if min_length <= length <= max_length:
+                return track_id
+        return None
+
     """ the feature location triplet (x_left, x_right, y) of trackId on frameId """
     def link_triplet(self, frameId: int, trackId: int) -> Tuple[float, float, float]:
         link = self.link(frameId, trackId)
