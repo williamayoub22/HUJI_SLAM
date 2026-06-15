@@ -1,4 +1,4 @@
-from pathlib import Path
+
 
 import cv2
 import matplotlib.pyplot as plt
@@ -13,6 +13,7 @@ from slam.io.image_loader import read_images
 from slam.io.poses import read_ground_truth_poses
 from slam.geometry.triangulation import triangulate_opencv
 from slam.geometry.projection import project_points
+from slam.config import PROJECT_DIR
 
 SECTION_7_MIN_TRACKS_LENGTH = 10
 
@@ -23,9 +24,6 @@ SECTION_7_MIN_TRACKS_LENGTH = 10
 # Number of frames to process.  Set to None for the full sequence.
 NUM_FRAMES = None
 REBUILD_DB = False
-
-CODE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = CODE_DIR.parent
 
 SEQUENCE_DIR = PROJECT_DIR / "dataset" / "sequences" / "00"
 POSES_PATH = PROJECT_DIR / "dataset" / "poses" / "00.txt"

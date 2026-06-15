@@ -275,6 +275,17 @@ def _count_frames(sequence_dir: Path) -> int:
     return len(list(image_dir.glob("*.png")))
 
 
+def load_tracking_database(base_filename: str | Path) -> TrackingDB:
+    """
+    Loads a TrackingDB saved with TrackingDB.serialize().
+
+    Returns:
+         db: the loaded tracking database.
+    """
+    db = TrackingDB()
+    db.load(str(base_filename))
+    return db
+
 def build_tracking_database(
     sequence_dir: Path,
     num_frames: int | None = None,
