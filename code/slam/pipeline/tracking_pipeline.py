@@ -4,26 +4,14 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-from ..features.detectors import extract_features, FeatureType
-from ..features.matching import match_and_filter, get_matched_points
-from ..geometry.correspondences import find_common_points
-from ..geometry.ransac import ransac_pnp
 from ..io.calibration import read_calib
+from ..geometry.correspondences import find_common_points
+from ..features.detectors import extract_features, FeatureType
 from ..io.image_loader import read_images
+from ..features.matching import match_and_filter, get_matched_points
+from ..geometry.ransac import ransac_pnp
 from ..pipeline.stereo_pipeline import create_stereo_point_cloud
-
-
-def to_homogeneous_transform(T: np.ndarray) -> np.ndarray:
-    """Converts either a 3x4 [R|t] matrix or a 4x4 matrix into a 4x4 transform."""
-    if T.shape == (4, 4):
-        return T
-
-    if T.shape == (3, 4):
-        T_hom = np.eye(4)
-        T_hom[:3, :] = T
-        return T_hom
-
-    raise ValueError(f"Unexpected transformation shape: {T.shape}")
+from ..geometry.transforms import to_homogeneous_transform
 
 
 def track_sequence(

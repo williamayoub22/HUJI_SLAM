@@ -178,7 +178,7 @@ def _match_temporal_features(
     if cur_left_features is None or len(cur_left_features) == 0:
         return _make_invalid_temporal_matches(num_prev_features)
 
-    if feature_type == "orb":
+    if feature_type in ("orb", "akaze"):
         norm_type = cv2.NORM_HAMMING
     else:
         norm_type = cv2.NORM_L2

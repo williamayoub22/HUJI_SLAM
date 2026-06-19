@@ -3,7 +3,7 @@ import numpy as np
 from typing import Literal, Tuple, List
 
 
-FeatureType = Literal["sift", "orb"]
+FeatureType = Literal["sift", "orb", "akaze"]
 
 DEFAULT_FEATURE_TYPE: FeatureType = "sift"
 DEFAULT_NUM_FEATURES = 1000
@@ -21,7 +21,7 @@ def create_detector(feature_type: FeatureType = DEFAULT_FEATURE_TYPE, num_featur
         - Floating-point descriptors
         - Should be matched with NORM_L2
 
-    ORB:
+    ORB & AKAZE:
         - Binary descriptors
         - Should be matched with NORM_HAMMING
     """
@@ -34,6 +34,9 @@ def create_detector(feature_type: FeatureType = DEFAULT_FEATURE_TYPE, num_featur
     if feature_type == "orb":
         nfeatures = DEFAULT_ORB_NUM_FEATURES if num_features is None else num_features
         return cv2.ORB_create(nfeatures=nfeatures)
+
+    if feature_type == "akaze":
+        return cv2.AKAZE_create()
 
     raise ValueError(f"Unsupported feature_type: {feature_type}")
 

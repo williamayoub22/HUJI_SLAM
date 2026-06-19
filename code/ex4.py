@@ -1,5 +1,7 @@
 
 
+from pathlib import Path
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -54,9 +56,9 @@ def build_or_load_database():
         db, inlier_percentages = build_tracking_database(
             sequence_dir=SEQUENCE_DIR,
             num_frames=NUM_FRAMES,
-            feature_type="orb",
+            feature_type="akaze",
             num_features=3000,
-            ratio_threshold=0.75,
+            ratio_threshold=0.85,
             deviation_threshold=2.0,
         )
         print("[4.1] Running consistency check …")
