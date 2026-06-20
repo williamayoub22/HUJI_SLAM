@@ -1,14 +1,24 @@
+"""Utilities for computing summary statistics of the tracking database."""
+
 from dataclasses import dataclass
-from typing import List
 
 import numpy as np
 
 from ..tracking_database import TrackingDB
 
 
-
 @dataclass
 class TrackingStats:
+    """Summary statistics describing tracks and frame-level associations.
+
+    Attributes:
+        total_tracks: Number of non-trivial tracks.
+        num_frames: Number of frames in the tracking database.
+        mean_track_length: Mean number of observations per track.
+        max_track_length: Maximum track length.
+        min_track_length: Minimum track length.
+        mean_frame_links: Mean number of tracks associated with a frame.
+    """
     total_tracks: int
     num_frames: int
     mean_track_length: float
@@ -17,6 +27,7 @@ class TrackingStats:
     mean_frame_links: float
 
     def __str__(self) -> str:
+        """Return a readable multi-line summary of the tracking statistics."""
         return (
             "Tracking statistics:\n"
             f"  Total number of tracks: {self.total_tracks}\n"
@@ -28,6 +39,7 @@ class TrackingStats:
         )
 
     def to_latex_table_rows(self) -> str:
+        """Return the statistics as LaTex table rows."""
         return (
             f"Total number of tracks & {self.total_tracks} \\\\\n"
             f"Number of frames & {self.num_frames} \\\\\n"
@@ -38,8 +50,8 @@ class TrackingStats:
         )
 
 
-""" all track lengths (excluding trivial length-1 tracks per exercise spec) """
-def get_track_lengths(db: TrackingDB, min_length: int = 2) -> List[int]:
+def get_track_lengths(db: TrackingDB, min_length: int = 2) -> list[int]:
+    """Return lengths of tracks with at least ``min_length`` observations."""
     return [
         db.track_length(track_id)
         for track_id in db.all_tracks()
@@ -47,20 +59,17 @@ def get_track_lengths(db: TrackingDB, min_length: int = 2) -> List[int]:
     ]
 
 
-""" number of non-trivial tracks appearing in each frame """
-def get_frame_link_counts(db: TrackingDB) -> List[int]:
-    return [
-        len(db.tracks(frame_id))
-        for frame_id in db.all_frames()
-    ]
+def get_frame_link_counts(db: TrackingDB) -> list[int]:
+    """Return the number of tracks associated with each frame."""
+    return [len(db.tracks(frame_id)) for frame_id in db.all_frames()]
 
 
-""" compute tracking statistics required in exercise 4.2 """
 def compute_tracking_statistics(db: TrackingDB) -> TrackingStats:
+    """Compute the tracking statistics required for Exercise 4.2."""
     track_lengths = get_track_lengths(db)
     frame_link_counts = get_frame_link_counts(db)
 
-    if len(track_lengths) == 0:
+    if not track_lengths:
         return TrackingStats(
             total_tracks=0,
             num_frames=db.frame_num(),
@@ -78,4 +87,3 @@ def compute_tracking_statistics(db: TrackingDB) -> TrackingStats:
         min_track_length=int(np.min(track_lengths)),
         mean_frame_links=float(np.mean(frame_link_counts)),
     )
-
