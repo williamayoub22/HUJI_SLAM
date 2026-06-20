@@ -115,3 +115,22 @@ def stereo_point_from_triplet(
 def stereo_point_to_array(point: gtsam.StereoPoint2) -> np.ndarray:
     """Convert a StereoPoint2 to ``[u_left, u_right, v]``."""
     return np.array([point.uL(), point.uR(), point.v()], dtype=float)
+
+def stereo_residual_norm(
+    measurement: gtsam.StereoPoint2,
+    projection: gtsam.StereoPoint2,
+) -> float:
+    """Return the L2 norm of a three-coordinate stereo measurement residual.
+
+    The residual is ordered as ``[u_left, u_right, v]``.
+
+    Args:
+        measurement: Observed stereo image measurement.
+        projection: Predicted stereo image measurement.
+
+    Returns:
+        Euclidean norm of the three-coordinate stereo residual.
+    """
+    residual = stereo_point_to_array(measurement) - stereo_point_to_array(projection)
+    return float(np.linalg.norm(residual))
+
