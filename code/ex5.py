@@ -1,8 +1,17 @@
-from pathlib import Path
+# from pathlib import Path
 
 import cv2
 import numpy as np
 
+from slam.config import (
+    DB_PATH,
+    EX5_OUTPUT_DIR,
+    GLOBAL_CAMERA_MATRICES_PATH,
+    GT_POSES_PATH,
+    LEFT_IMAGES_DIR,
+    RIGHT_IMAGES_DIR,
+)
+from slam.visualization.trajectory import camera_centers_from_extrinsic
 from slam.ba.results import BundleWindowSolution
 from slam.ba.run_ba_on_windows import solve_all_bundle_windows
 from slam.io.calibration import read_calib
@@ -25,14 +34,6 @@ from slam.visualization.trajectory import (
 )
 from slam.ba.diagnostics import analyze_largest_initial_projection_factor
 from gtsam.symbol_shorthand import C
-
-CODE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = CODE_DIR.parent
-
-OUTPUT_DIR = PROJECT_DIR / "outputs" / "ex5"
-DB_PATH = PROJECT_DIR / "outputs" / "ex4" / "tracking_db"
-GLOBAL_CAMERA_MATRICES_PATH = PROJECT_DIR / "outputs" / "ex3" / "global_camera_matrices.npy"
-GT_POSES_PATH = PROJECT_DIR / "dataset" / "poses" / "00.txt"
 
 
 def print_error_stats(result, reprojection_plot_path, factor_plot_path):
@@ -71,8 +72,8 @@ def question5_1(db, global_camera_matrices, K):
         sigma_pixels=1.0,
     )
 
-    reprojection_plot_path = OUTPUT_DIR / "q5_1_reprojection_error.png"
-    factor_plot_path = OUTPUT_DIR / "q5_1_factor_error.png"
+    reprojection_plot_path = EX5_OUTPUT_DIR / "q5_1_reprojection_error.png"
+    factor_plot_path = EX5_OUTPUT_DIR / "q5_1_factor_error.png"
 
     plot_reprojection_errors_q5_1(
         frame_ids=result.frame_ids,
@@ -138,23 +139,8 @@ def question5_3(db, global_camera_matrices, K):
 
     frame_id = diagnostic.frame_id
 
-    left_image_path = (
-            PROJECT_DIR
-            / "dataset"
-            / "sequences"
-            / "00"
-            / "image_0"
-            / f"{frame_id:06d}.png"
-    )
-
-    right_image_path = (
-            PROJECT_DIR
-            / "dataset"
-            / "sequences"
-            / "00"
-            / "image_1"
-            / f"{frame_id:06d}.png"
-    )
+    left_image_path = LEFT_IMAGES_DIR / f"{frame_id:06d}.png"
+    right_image_path = RIGHT_IMAGES_DIR / f"{frame_id:06d}.png"
 
     left_image = cv2.imread(str(left_image_path))
     right_image = cv2.imread(str(right_image_path))
@@ -186,7 +172,7 @@ def question5_3(db, global_camera_matrices, K):
         f"right={diagnostic.optimized.right_distance_pixels:.3f}px"
     )
 
-    largest_factor_plot_path = OUTPUT_DIR / "q5_3_largest_initial_factor.png"
+    largest_factor_plot_path = EX5_OUTPUT_DIR / "q5_3_largest_initial_factor.png"
 
     plot_largest_factor_diagnostic(
         diagnostic=diagnostic,
@@ -197,8 +183,8 @@ def question5_3(db, global_camera_matrices, K):
 
     print(f"Saved largest-factor diagnostic to: {largest_factor_plot_path}")
 
-    trajectory_plot_path = OUTPUT_DIR / "bundle_scene_3d.png"
-    top_down_plot_path = OUTPUT_DIR / "bundle_scene_top_down.png"
+    trajectory_plot_path = EX5_OUTPUT_DIR / "bundle_scene_3d.png"
+    top_down_plot_path = EX5_OUTPUT_DIR / "bundle_scene_top_down.png"
 
     plot_bundle_scene_3d(result, trajectory_plot_path)
     plot_bundle_scene_top_down(result, top_down_plot_path)
@@ -264,8 +250,8 @@ def question5_4(db, global_camera_matrices, K, gt_positions_all):
 
     gt_keyframe_positions = gt_positions_all[keyframes]
 
-    scene_path = OUTPUT_DIR / "q5_4_keyframes_and_landmarks_top_down.png"
-    error_path = OUTPUT_DIR / "q5_4_keyframe_localization_error.png"
+    scene_path = EX5_OUTPUT_DIR / "q5_4_keyframes_and_landmarks_top_down.png"
+    error_path = EX5_OUTPUT_DIR / "q5_4_keyframe_localization_error.png"
 
     plot_keyframes_and_landmarks_top_down(
         keyframe_ids=keyframes,
@@ -290,14 +276,13 @@ def question5_4(db, global_camera_matrices, K, gt_positions_all):
 
 
 def init():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    EX5_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     db = load_tracking_database(DB_PATH)
     global_camera_matrices = np.load(GLOBAL_CAMERA_MATRICES_PATH)
     P1, P2 = read_calib()
     K = make_gtsam_stereo_calibration(P1, P2)
 
     gt_poses = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
-    from slam.visualization.trajectory import camera_centers_from_extrinsic
     gt_positions_all = camera_centers_from_extrinsic(gt_poses)
 
     return K, db, global_camera_matrices, gt_positions_all
