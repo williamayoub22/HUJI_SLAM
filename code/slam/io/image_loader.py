@@ -1,62 +1,93 @@
+"""Load stereo images and stereo feature matches."""
 
-import cv2
-import os
-import numpy as np
-
-from typing import Tuple
 from pathlib import Path
 
-from ..features.matching import extract_and_match_features
+import cv2
+import numpy as np
 
-FRAME_INDEX = 0
+from slam.config import LEFT_IMAGES_DIR, RIGHT_IMAGES_DIR
+from slam.features.detectors import FeatureType
+from slam.features.matching import extract_and_match_features
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-BASE_DIR = PROJECT_ROOT / "dataset" / "sequences" / "00"
-
-LEFT_IMG_DIR = 'image_0'
-RIGHT_IMG_DIR = 'image_1'
-IMG_FILENAME_FORMAT = '{:06d}.png'
+DEFAULT_FRAME_INDEX = 0
+IMAGE_FILENAME_FORMAT = "{frame_id:06d}.png"
 
 
-def read_images(idx: int = FRAME_INDEX) -> Tuple[np.ndarray, np.ndarray]:
-    """Loads the stereo pair for a given index using pinned path formats."""
-    img_name = IMG_FILENAME_FORMAT.format(idx)
+def read_images(
+    frame_id: int = DEFAULT_FRAME_INDEX,
+    left_images_dir: Path = LEFT_IMAGES_DIR,
+    right_images_dir: Path = RIGHT_IMAGES_DIR,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one rectified stereo image pair in grayscale.
 
-    left_path = os.path.join(BASE_DIR, LEFT_IMG_DIR, img_name)
-    right_path = os.path.join(BASE_DIR, RIGHT_IMG_DIR, img_name)
+    Args:
+        frame_id: Zero-based frame index.
+        left_images_dir: Directory containing left-camera images.
+        right_images_dir: Directory containing right-camera images.
 
-    img1 = cv2.imread(left_path, cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(right_path, cv2.IMREAD_GRAYSCALE)
+    Returns:
+        Left and right grayscale images.
 
-    if img1 is None or img2 is None:
-        raise FileNotFoundError(f"Could not read images. Check paths:\n{left_path}\n{right_path}")
+    Raises:
+        ValueError: If ``frame_id`` is negative.
+        FileNotFoundError: If either stereo image cannot be loaded.
+    """
+    if frame_id < 0:
+        raise ValueError(f"frame_id must be non-negative, got {frame_id}.")
 
-    return img1, img2
+    filename = IMAGE_FILENAME_FORMAT.format(frame_id=frame_id)
+    left_path = left_images_dir / filename
+    right_path = right_images_dir / filename
+
+    left_image = cv2.imread(str(left_path), cv2.IMREAD_GRAYSCALE)
+    right_image = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
+
+    if left_image is None or right_image is None:
+        raise FileNotFoundError(
+            f"Could not load stereo images:\n  left:  {left_path}\n  right: {right_path}"
+        )
+
+    return left_image, right_image
 
 
 def load_matches_between_images(
-    frame_idx: int,
-    feature_type: str = "sift",
+    frame_id: int,
+    feature_type: FeatureType = "sift",
     num_features: int = 1000,
     use_ratio_test: bool = False,
-):
-    """
-    Loads a stereo image pair, extracts features, and computes feature matches.
+) -> tuple[
+    list[cv2.KeyPoint],
+    list[cv2.KeyPoint],
+    np.ndarray,
+    np.ndarray,
+    list[cv2.DMatch],
+]:
+    """Load one stereo pair, extract features, and match their descriptors.
+
+    Args:
+        frame_id: Zero-based stereo-frame index.
+        feature_type: Feature detector and descriptor type.
+        num_features: Requested number of detected features.
+        use_ratio_test: Whether to apply Lowe's ratio test.
 
     Returns:
-        kp_left, kp_right: Detected keypoints.
-        left_img, right_img: Stereo images.
-        matches: Feature matches between the images.
+        Left keypoints, right keypoints, left image, right image, and accepted
+        stereo matches.
     """
-    left_img, right_img = read_images(frame_idx)
+    left_image, right_image = read_images(frame_id)
 
-    kp_left, kp_right, matches = extract_and_match_features(
-        left_img,
-        right_img,
+    left_keypoints, right_keypoints, matches = extract_and_match_features(
+        left_image,
+        right_image,
         feature_type=feature_type,
         num_features=num_features,
         use_ratio_test=use_ratio_test,
     )
 
-    return kp_left, kp_right, left_img, matches, right_img
-
+    return (
+        left_keypoints,
+        right_keypoints,
+        left_image,
+        right_image,
+        matches,
+    )
