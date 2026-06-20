@@ -8,8 +8,8 @@ from slam.tracking_database import TrackingDB
 
 from ..geometry.transforms import relative_extrinsic
 from .gtsam_utils import (
-    convert_extrinsic_to_pose3,
     make_stereo_camera,
+    pose3_from_world_to_camera_extrinsic,
     stereo_point_from_triplet,
 )
 from .results import ProjectionFactorMetadata
@@ -95,7 +95,7 @@ def build_local_bundle_graph(
             T_global_to_frame=T_world_to_frame,
         )
 
-        poses[frame_id] = convert_extrinsic_to_pose3(T_first_to_frame)
+        poses[frame_id] = pose3_from_world_to_camera_extrinsic(T_first_to_frame)
         stereo_cameras[frame_id] = make_stereo_camera(T_first_to_frame, K)
 
     # Retain only tracks whose initialization measurement can be backprojected.

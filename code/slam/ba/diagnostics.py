@@ -4,7 +4,7 @@ import gtsam
 from gtsam.symbol_shorthand import C, Q
 
 from slam.ba.gtsam_utils import (
-    stereo_image_projection_distances,
+    stereo_image_distances,
     stereo_point_from_triplet,
 )
 from slam.ba.results import (
@@ -85,10 +85,7 @@ def evaluate_projection_factor(
     camera = gtsam.StereoCamera(pose, calibration)
     projection = camera.project(landmark)
 
-    left_distance, right_distance = stereo_image_projection_distances(
-        measurement,
-        projection,
-    )
+    left_distance, right_distance = stereo_image_distances(measurement, projection)
 
     return ProjectionEvaluation(
         factor_error=float(factor.error(values)),
