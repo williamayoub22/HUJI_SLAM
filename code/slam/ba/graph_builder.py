@@ -18,8 +18,8 @@ from .window_selection import collect_window_tracks
 
 def build_local_bundle_graph(
     db: TrackingDB,
-    global_camera_matrices: np.ndarray,
-    K: gtsam.Cal3_S2Stereo,
+    world_to_camera_extrinsics: np.ndarray,
+    calibration: gtsam.Cal3_S2Stereo,
     window_frames: list[int],
     min_track_observations: int = 2,
     measurement_sigma_pixels: float = 1.0,
@@ -37,8 +37,8 @@ def build_local_bundle_graph(
 
     Args:
         db: Tracking database containing stereo observations.
-        global_camera_matrices: World-to-camera extrinsics for all frames.
-        K: Stereo camera calibration.
+        world_to_camera_extrinsics: World-to-camera extrinsics for all frames.
+        calibration: Stereo camera calibration.
         window_frames: Consecutive frame IDs included in the local window.
         min_track_observations: Minimum observations required for a track.
         measurement_sigma_pixels: Isotropic stereo-measurement noise standard
@@ -65,7 +65,7 @@ def build_local_bundle_graph(
     initial = gtsam.Values()
 
     first_frame = window_frames[0]
-    T_world_to_first = global_camera_matrices[first_frame]
+    T_world_to_first = world_to_camera_extrinsics[first_frame]
 
     measurement_noise = gtsam.noiseModel.Isotropic.Sigma(
         3,
@@ -88,7 +88,7 @@ def build_local_bundle_graph(
     poses: dict[int, gtsam.Pose3] = {}
 
     for frame_id in window_frames:
-        T_world_to_frame = global_camera_matrices[frame_id]
+        T_world_to_frame = world_to_camera_extrinsics[frame_id]
 
         T_first_to_frame = relative_extrinsic(
             T_global_to_ref=T_world_to_first,
@@ -96,7 +96,7 @@ def build_local_bundle_graph(
         )
 
         poses[frame_id] = pose3_from_world_to_camera_extrinsic(T_first_to_frame)
-        stereo_cameras[frame_id] = make_stereo_camera(T_first_to_frame, K)
+        stereo_cameras[frame_id] = make_stereo_camera(T_first_to_frame, calibration)
 
     # Retain only tracks whose initialization measurement can be backprojected.
     initialized_landmarks: dict[int, gtsam.Point3] = {}
@@ -158,7 +158,7 @@ def build_local_bundle_graph(
                     measurement_noise,
                     C(frame_id),
                     Q(track_id),
-                    K,
+                    calibration,
                 )
             )
 
