@@ -11,14 +11,19 @@ select = [
     "UP",  # pyupgrade
     "B",   # bugbear
     "SIM", # simplifications
+    "D", # doc
 ]
 ignore = [
     "E501", # formatter handles line length reasonably
 ]
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
 "code/ex*.py" = ["E402"]
-"tests/**/*.py" = ["S101"]
+"tests/**/*.py" = ["S10"]
+"code/**/*.py" = ["D105"]
 
 [tool.ruff.format]
 quote-style = "double"
