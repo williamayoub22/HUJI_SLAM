@@ -2,7 +2,11 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import sys
 from tqdm import tqdm
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "code"))
 
 from slam.tracking_database import TrackingDB
 from slam.io.image_loader import read_images
