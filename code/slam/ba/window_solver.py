@@ -1,5 +1,7 @@
 """Solve independent local bundle-adjustment problems over keyframe windows."""
 
+from time import perf_counter
+
 import gtsam
 import numpy as np
 
@@ -17,54 +19,73 @@ def solve_all_bundle_windows(
     keyframes: list[int],
     min_track_observations: int = 2,
     measurement_sigma_pixels: float = 1.0,
+    verbose: bool = False,
 ) -> list[BundleWindowSolution]:
     """Solve one independent local BA problem for each adjacent keyframe pair.
 
     Each window is optimized in the coordinate system of its first frame.
-    The returned solutions remain local; use window composition separately to
-    express keyframes and landmarks in a common frame.
 
     Args:
         db: Tracking database containing stereo observations.
         world_to_camera_extrinsics: World-to-camera extrinsics for all frames.
         calibration: Stereo camera calibration.
-        keyframes: Ordered keyframe IDs defining consecutive local windows.
+        keyframes: Ordered keyframe IDs defining local BA windows.
         min_track_observations: Minimum observations required to retain a track.
         measurement_sigma_pixels: Stereo measurement noise standard deviation.
+        verbose: Whether to print progress for each solved window.
 
     Returns:
         One solved bundle-adjustment result for every adjacent keyframe pair.
-
-    Raises:
-        ValueError: If fewer than two keyframes are provided.
-        RuntimeError: If optimization fails for any bundle window.
     """
-    if len(keyframes) < 2:
-        raise ValueError("At least two keyframes are required to form a bundle window.")
+    windows = bundle_windows_from_keyframes(keyframes)
+
+    if not windows:
+        raise ValueError("At least two keyframes are required.")
 
     solutions: list[BundleWindowSolution] = []
+    total_windows = len(windows)
 
-    for window_frames in bundle_windows_from_keyframes(keyframes):
-        try:
-            result = optimize_bundle_window(
-                db=db,
-                world_to_camera_extrinsics=world_to_camera_extrinsics,
-                calibration=calibration,
-                window_frames=window_frames,
-                min_track_observations=min_track_observations,
-                measurement_sigma_pixels=measurement_sigma_pixels,
+    for window_index, window_frames in enumerate(windows, start=1):
+        start_frame = window_frames[0]
+        end_frame = window_frames[-1]
+
+        if verbose:
+            print(
+                f"[5.4] Window {window_index}/{total_windows}: "
+                f"{start_frame} -> {end_frame} "
+                f"({len(window_frames)} frames)...",
+                flush=True,
             )
-        except RuntimeError as error:
-            raise RuntimeError(
-                f"Failed to optimize bundle window {window_frames[0]} -> {window_frames[-1]}."
-            ) from error
+
+        start_time = perf_counter()
+
+        result = optimize_bundle_window(
+            db=db,
+            world_to_camera_extrinsics=world_to_camera_extrinsics,
+            calibration=calibration,
+            window_frames=window_frames,
+            min_track_observations=min_track_observations,
+            measurement_sigma_pixels=measurement_sigma_pixels,
+        )
+
+        elapsed_seconds = perf_counter() - start_time
 
         solutions.append(
             BundleWindowSolution(
-                start_frame=window_frames[0],
-                end_frame=window_frames[-1],
+                start_frame=start_frame,
+                end_frame=end_frame,
                 result=result,
             )
         )
+
+        if verbose:
+            print(
+                f"      done in {elapsed_seconds:.1f}s | "
+                f"poses={len(window_frames)} | "
+                f"landmarks={len(result.track_ids)} | "
+                f"factors={result.num_factors} | "
+                f"error={result.initial_error:.1f} -> {result.final_error:.1f}",
+                flush=True,
+            )
 
     return solutions
