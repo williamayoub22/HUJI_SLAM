@@ -14,7 +14,7 @@ DEFAULT_ORB_NUM_FEATURES = 3000
 _cached_detectors: dict[tuple[FeatureType, int | None], cv2.Feature2D] = {}
 
 
-def _normalize_feature_type(feature_type: str) -> FeatureType:
+def normalize_feature_type(feature_type: str) -> FeatureType:
     """Normalize and validate a supported feature-detector name.
 
     Args:
@@ -54,7 +54,7 @@ def create_detector(
     Raises:
         ValueError: If ``num_features`` is not positive when provided.
     """
-    normalized_type = _normalize_feature_type(feature_type)
+    normalized_type = normalize_feature_type(feature_type)
 
     if num_features is not None and num_features <= 0:
         raise ValueError("num_features must be positive when provided.")
@@ -89,7 +89,7 @@ def extract_features(
     Raises:
         RuntimeError: If no descriptors are detected in the image.
     """
-    normalized_type = _normalize_feature_type(feature_type)
+    normalized_type = normalize_feature_type(feature_type)
 
     effective_num_features = None if normalized_type == "akaze" else num_features
     cache_key = (normalized_type, effective_num_features)

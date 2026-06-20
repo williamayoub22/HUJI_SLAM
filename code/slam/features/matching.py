@@ -1,100 +1,198 @@
+"""Descriptor matching and match-filtering utilities."""
+
+from collections.abc import Sequence
+
 import cv2
 import numpy as np
 
-from typing import Sequence, List, Tuple
-
-from .detectors import extract_features, FeatureType
-
+from .detectors import FeatureType, extract_features, normalize_feature_type
 
 KNN_NEIGHBORS = 2
 RATIO_THRESHOLD = 0.75
 
 
-def create_matcher(feature_type: FeatureType = "sift"):
-    """Create a brute-force matcher compatible with SIFT or ORB descriptors."""
-    feature_type = feature_type.lower()
+def create_matcher(
+    feature_type: FeatureType = "sift",
+) -> cv2.BFMatcher:
+    """Create a brute-force matcher compatible with a descriptor type.
 
-    if feature_type == "sift":
+    Args:
+        feature_type: Feature detector that produced the descriptors.
+
+    Returns:
+        Brute-force matcher using L2 for SIFT and Hamming distance for binary
+        descriptors.
+    """
+    normalized_type = normalize_feature_type(feature_type)
+
+    if normalized_type == "sift":
         return cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
 
-    if feature_type in ("orb", "akaze"):
-        return cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+    return cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
-    raise ValueError(f"Unsupported feature_type: {feature_type}")
 
 def match_features(
-    des1: np.ndarray,
-    des2: np.ndarray,
+    descriptors1: np.ndarray,
+    descriptors2: np.ndarray,
     feature_type: FeatureType = "sift",
     k: int = KNN_NEIGHBORS,
 ) -> Sequence[Sequence[cv2.DMatch]]:
-    """Return KNN descriptor matches from image 1 descriptors to image 2 descriptors."""
+    """Return the ``k`` nearest descriptor matches from image 1 to image 2.
+
+    Args:
+        descriptors1: Descriptor matrix for the first image.
+        descriptors2: Descriptor matrix for the second image.
+        feature_type: Feature detector that produced the descriptors.
+        k: Number of nearest neighbors returned per query descriptor.
+
+    Returns:
+        K-nearest-neighbor matches for every descriptor in ``descriptors1``.
+
+    Raises:
+        ValueError: If ``k`` is not positive.
+    """
+    if k <= 0:
+        raise ValueError("k must be positive.")
+
     matcher = create_matcher(feature_type)
-    return matcher.knnMatch(des1, des2, k=k)
+    return matcher.knnMatch(descriptors1, descriptors2, k=k)
 
 
 def filter_matches_ratio(
     knn_matches: Sequence[Sequence[cv2.DMatch]],
     ratio: float = RATIO_THRESHOLD,
-) -> Tuple[List[cv2.DMatch], List[cv2.DMatch]]:
-    """Filters KNN matches using Lowe's ratio test."""
-    good_matches = []
-    rejected_matches = []
+) -> tuple[list[cv2.DMatch], list[cv2.DMatch]]:
+    """Filter two-neighbor matches using Lowe's ratio test.
+
+    Args:
+        knn_matches: KNN matches with at least two candidates per query.
+        ratio: Maximum accepted ratio between best and second-best distances.
+
+    Returns:
+        Matches that pass the ratio test and rejected best-match candidates.
+
+    Raises:
+        ValueError: If ``ratio`` is not in the interval ``(0, 1]``.
+    """
+    if not 0 < ratio <= 1:
+        raise ValueError("ratio must lie in the interval (0, 1].")
+
+    accepted_matches: list[cv2.DMatch] = []
+    rejected_matches: list[cv2.DMatch] = []
 
     for neighbors in knn_matches:
         if len(neighbors) < 2:
             continue
 
-        m, n = neighbors
+        best_match, second_best_match = neighbors
 
-        if m.distance < ratio * n.distance:
-            good_matches.append(m)
+        if best_match.distance < ratio * second_best_match.distance:
+            accepted_matches.append(best_match)
         else:
-            rejected_matches.append(m)
+            rejected_matches.append(best_match)
 
-    return good_matches, rejected_matches
+    return accepted_matches, rejected_matches
 
 
 def match_and_filter(
-    des1: np.ndarray,
-    des2: np.ndarray,
+    descriptors1: np.ndarray,
+    descriptors2: np.ndarray,
     feature_type: FeatureType = "sift",
     ratio: float = RATIO_THRESHOLD,
-) -> List[cv2.DMatch]:
-    """Match descriptors and return only matches passing Lowe's ratio test."""
-    knn_matches = match_features(des1, des2, feature_type=feature_type)
-    good_matches, _ = filter_matches_ratio(knn_matches, ratio)
-    return good_matches
+) -> list[cv2.DMatch]:
+    """Match descriptors and retain only matches passing Lowe's ratio test."""
+    knn_matches = match_features(
+        descriptors1,
+        descriptors2,
+        feature_type=feature_type,
+        k=KNN_NEIGHBORS,
+    )
+
+    accepted_matches, _ = filter_matches_ratio(knn_matches, ratio)
+    return accepted_matches
 
 
 def get_matched_points(
-    kp1: List[cv2.KeyPoint],
-    kp2: List[cv2.KeyPoint],
-    matches: List[cv2.DMatch],
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Convert DMatch objects into two aligned Nx2 arrays of pixel locations."""
-    pts1 = np.array([kp1[m.queryIdx].pt for m in matches])
-    pts2 = np.array([kp2[m.trainIdx].pt for m in matches])
+    keypoints1: Sequence[cv2.KeyPoint],
+    keypoints2: Sequence[cv2.KeyPoint],
+    matches: Sequence[cv2.DMatch],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert descriptor matches into aligned ``(N, 2)`` pixel-coordinate arrays.
 
-    return pts1, pts2
+    Args:
+        keypoints1: Keypoints detected in the first image.
+        keypoints2: Keypoints detected in the second image.
+        matches: Correspondences between the two keypoint sets.
+
+    Returns:
+        Pixel coordinates from the first and second images in match order.
+    """
+    if not matches:
+        empty_points = np.empty((0, 2), dtype=np.float32)
+        return empty_points, empty_points.copy()
+
+    points1 = np.asarray(
+        [keypoints1[match.queryIdx].pt for match in matches],
+        dtype=np.float32,
+    )
+    points2 = np.asarray(
+        [keypoints2[match.trainIdx].pt for match in matches],
+        dtype=np.float32,
+    )
+
+    return points1, points2
 
 
 def extract_and_match_features(
-    img1: np.ndarray,
-    img2: np.ndarray,
+    image1: np.ndarray,
+    image2: np.ndarray,
     feature_type: FeatureType = "sift",
     num_features: int | None = None,
     ratio_threshold: float = RATIO_THRESHOLD,
     use_ratio_test: bool = False,
-) -> Tuple[List[cv2.KeyPoint], List[cv2.KeyPoint], List[cv2.DMatch]]:
-    """Extract SIFT/ORB features from two images and return ratio-filtered matches."""
-    kp1, des1 = extract_features(img1, feature_type=feature_type, num_features=num_features)
-    kp2, des2 = extract_features(img2, feature_type=feature_type, num_features=num_features)
+) -> tuple[list[cv2.KeyPoint], list[cv2.KeyPoint], list[cv2.DMatch]]:
+    """Extract features from two images and compute descriptor correspondences.
 
-    knn_matches = match_features(des1, des2, feature_type=feature_type)
+    When ``use_ratio_test`` is false, this returns the nearest descriptor match
+    for every query descriptor. When true, it retains only matches passing
+    Lowe's ratio test.
+
+    Args:
+        image1: First input image.
+        image2: Second input image.
+        feature_type: Detector and descriptor implementation to use.
+        num_features: Requested maximum number of SIFT or ORB features.
+        ratio_threshold: Lowe ratio-test threshold.
+        use_ratio_test: Whether to reject ambiguous nearest-neighbor matches.
+
+    Returns:
+        Keypoints from both images and descriptor matches between them.
+    """
+    keypoints1, descriptors1 = extract_features(
+        image1,
+        feature_type=feature_type,
+        num_features=num_features,
+    )
+    keypoints2, descriptors2 = extract_features(
+        image2,
+        feature_type=feature_type,
+        num_features=num_features,
+    )
+
+    knn_matches = match_features(
+        descriptors1,
+        descriptors2,
+        feature_type=feature_type,
+        k=KNN_NEIGHBORS,
+    )
+
     if use_ratio_test:
-        good_matches, _ = filter_matches_ratio(knn_matches, ratio_threshold)
-        return kp1, kp2, good_matches
+        accepted_matches, _ = filter_matches_ratio(
+            knn_matches,
+            ratio=ratio_threshold,
+        )
+        return keypoints1, keypoints2, accepted_matches
 
-    best_matches = [neighbors[0] for neighbors in knn_matches if len(neighbors) > 0]
-    return kp1, kp2, best_matches
+    nearest_matches = [neighbors[0] for neighbors in knn_matches if neighbors]
+
+    return keypoints1, keypoints2, nearest_matches
