@@ -5,7 +5,7 @@ import numpy as np
 from .pnp import solve_pnp_safe
 from .projection import count_supporters
 
-MAX_RANSAC_ITERS = 200
+MAX_RANSAC_ITERS = 2000
 RANSAC_CONFIDENCE = 0.99
 MAX_TRANSLATION = 30.0
 SUPPORTER_THRESH = 2.0

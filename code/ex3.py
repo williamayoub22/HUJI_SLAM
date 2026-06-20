@@ -19,6 +19,7 @@ from slam.io.calibration import read_calib
 from slam.geometry.projection import count_supporters
 from slam.geometry.correspondences import find_common_points
 from slam.geometry.ransac import ransac_pnp
+from slam.geometry.transforms import save_global_camera_matrices
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1
@@ -26,9 +27,10 @@ FRAME_1_INDEX = 1
 COMMON_POINT_TOLERANCE = 1e-3
 SUPPORTER_THRESHOLD_PIXELS = 2.0
 PNP_NUM_POINTS = 4
-FEATURE_TYPE: FeatureType = "orb"
+FEATURE_TYPE: FeatureType = "akaze"
 SEQ_DIR = Path(__file__).resolve().parent.parent / "dataset" / "sequences" / "00"
 POSES_PATH = Path(__file__).resolve().parent.parent / "dataset" / "poses" / "00.txt"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "outputs" / "ex3"
 
 
 def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
@@ -46,7 +48,7 @@ def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
     point_cloud_0 = create_stereo_point_cloud(
         FRAME_0_INDEX,
         reject_negative_depth=True,
-        feature_type="orb",
+        feature_type="akaze",
         num_features=3000,
         use_ratio_test=True,
     )
@@ -54,7 +56,7 @@ def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
     point_cloud_1 = create_stereo_point_cloud(
         FRAME_1_INDEX,
         reject_negative_depth=True,
-        feature_type = "orb",
+        feature_type = "akaze",
         num_features = 3000,
         use_ratio_test=True
     )
@@ -282,6 +284,23 @@ def section_3_5(
 
     return T_refined, inlier_mask
 
+# def section_3_6() -> None:
+#     print("--- Section 3.6 ---")
+#
+#     estimated_positions, relative_transforms, elapsed_time = track_sequence(
+#         sequence_dir=SEQ_DIR,
+#         num_frames=None,
+#         feature_type=FEATURE_TYPE,
+#         num_features=3000,
+#         use_ratio_test=True,
+#     )
+#
+#     gt_poses = read_ground_truth_poses(POSES_PATH)
+#
+#     print(f"Tracking took {elapsed_time:.2f} seconds")
+#     print(f"Estimated {len(relative_transforms)} relative transformations")
+#     plot_trajectory(estimated_positions, gt_poses)
+
 def section_3_6() -> None:
     print("--- Section 3.6 ---")
 
@@ -297,6 +316,27 @@ def section_3_6() -> None:
 
     print(f"Tracking took {elapsed_time:.2f} seconds")
     print(f"Estimated {len(relative_transforms)} relative transformations")
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Save the raw relative PnP transforms as well, for debugging/reproducibility.
+    np.save(
+        OUTPUT_DIR / "relative_transforms.npy",
+        np.asarray(relative_transforms),
+    )
+
+    # Compose relative PnP transforms into global camera matrices T_{0 -> i}.
+    global_camera_matrices = save_global_camera_matrices(
+        relative_transforms=relative_transforms,
+        output_dir=OUTPUT_DIR,
+    )
+
+    print(
+        f"Saved global camera matrices with shape "
+        f"{global_camera_matrices.shape} to "
+        f"{OUTPUT_DIR / 'global_camera_matrices.npy'}"
+    )
+
     plot_trajectory(estimated_positions, gt_poses)
 
 

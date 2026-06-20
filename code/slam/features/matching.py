@@ -17,7 +17,7 @@ def create_matcher(feature_type: FeatureType = "sift"):
     if feature_type == "sift":
         return cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
 
-    if feature_type == "orb":
+    if feature_type in ("orb", "akaze"):
         return cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
     raise ValueError(f"Unsupported feature_type: {feature_type}")
