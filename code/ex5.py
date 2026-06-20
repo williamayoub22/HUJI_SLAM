@@ -249,13 +249,6 @@ def question5_4(db, global_camera_matrices, K, gt_positions_all):
         compose_global_keyframe_poses(solutions)
     )
 
-    for frame_id in keyframes[1:]:
-        relative_pose = relative_keyframe_poses[frame_id]
-        print(
-            f"Relative pose to keyframe {frame_id}: "
-            f"translation={np.asarray(relative_pose.translation())}"
-        )
-
     landmarks_global = collect_global_landmarks(
         solutions=solutions,
         global_keyframe_poses=global_keyframe_poses,

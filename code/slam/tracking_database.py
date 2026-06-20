@@ -469,7 +469,7 @@ class TrackingDB:
             frame_links_num = len(self.links(fId))
             assert frame_links_num == len(self.tracks(fId))
             link_count += frame_links_num
-            print(fId, ':  +', frame_links_num, '=', link_count, '/', n)
+
         assert link_count == n
         print('Elapsed time: {0:.2f} secs.'.format(timer() - start))
 
