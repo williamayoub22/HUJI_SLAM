@@ -71,8 +71,7 @@ def pose3_from_world_to_camera_extrinsic(
     """
     if T_world_to_camera.shape not in {(3, 4), (4, 4)}:
         raise ValueError(
-            "Expected a transform with shape (3, 4) or (4, 4), "
-            f"got {T_world_to_camera.shape}."
+            f"Expected a transform with shape (3, 4) or (4, 4), got {T_world_to_camera.shape}."
         )
 
     R_world_to_camera = T_world_to_camera[:3, :3]
@@ -116,6 +115,7 @@ def stereo_point_to_array(point: gtsam.StereoPoint2) -> np.ndarray:
     """Convert a StereoPoint2 to ``[u_left, u_right, v]``."""
     return np.array([point.uL(), point.uR(), point.v()], dtype=float)
 
+
 def stereo_residual_norm(
     measurement: gtsam.StereoPoint2,
     projection: gtsam.StereoPoint2,
@@ -133,4 +133,3 @@ def stereo_residual_norm(
     """
     residual = stereo_point_to_array(measurement) - stereo_point_to_array(projection)
     return float(np.linalg.norm(residual))
-

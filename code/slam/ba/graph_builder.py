@@ -72,9 +72,7 @@ def build_local_bundle_graph(
         measurement_sigma_pixels,
     )
 
-    prior_noise = gtsam.noiseModel.Diagonal.Sigmas(
-        np.full(6, 1e-3, dtype=float)
-    )
+    prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.full(6, 1e-3, dtype=float))
 
     tracks_to_frames = collect_window_tracks(
         db=db,
@@ -109,9 +107,7 @@ def build_local_bundle_graph(
         )
 
         try:
-            landmark = stereo_cameras[initialization_frame].backproject(
-                initialization_measurement
-            )
+            landmark = stereo_cameras[initialization_frame].backproject(initialization_measurement)
         except RuntimeError:
             continue
 
@@ -146,9 +142,7 @@ def build_local_bundle_graph(
         inserted_landmarks.append(track_id)
 
         for frame_id in track_frames:
-            measurement = stereo_point_from_triplet(
-                db.link_triplet(frame_id, track_id)
-            )
+            measurement = stereo_point_from_triplet(db.link_triplet(frame_id, track_id))
 
             factor_index = graph.size()
 

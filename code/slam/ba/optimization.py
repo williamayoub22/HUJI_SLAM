@@ -28,15 +28,9 @@ def _validate_graph_keys(
 
     for factor_index in range(graph.size()):
         factor = graph.at(factor_index)
-        factor_keys.update(
-            int(key)
-            for key in factor.keys()
-        )
+        factor_keys.update(int(key) for key in factor.keys())
 
-    initial_keys = {
-        int(key)
-        for key in initial.keys()
-    }
+    initial_keys = {int(key) for key in initial.keys()}
 
     unused_initial_keys = initial_keys - factor_keys
     missing_initial_keys = factor_keys - initial_keys

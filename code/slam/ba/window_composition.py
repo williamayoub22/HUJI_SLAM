@@ -44,8 +44,8 @@ def compose_keyframe_poses_in_frame0(
         relative_keyframe_poses[end_frame] = relative_pose
 
         # Maps end-frame coordinates into frame-0 coordinates.
-        keyframe_poses_in_frame0[end_frame] = (
-            keyframe_poses_in_frame0[start_frame].compose(relative_pose)
+        keyframe_poses_in_frame0[end_frame] = keyframe_poses_in_frame0[start_frame].compose(
+            relative_pose
         )
 
     return keyframe_poses_in_frame0, relative_keyframe_poses

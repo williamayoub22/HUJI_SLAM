@@ -19,6 +19,7 @@ class TrackingStats:
         min_track_length: Minimum track length.
         mean_frame_links: Mean number of tracks associated with a frame.
     """
+
     total_tracks: int
     num_frames: int
     mean_track_length: float
