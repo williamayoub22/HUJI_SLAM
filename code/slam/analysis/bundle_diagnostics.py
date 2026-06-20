@@ -1,5 +1,7 @@
 """Diagnostics for inspecting bundle-adjustment projection factors."""
 
+from dataclasses import dataclass
+
 import gtsam
 from gtsam.symbol_shorthand import C, Q
 
@@ -9,11 +11,47 @@ from slam.ba.gtsam_utils import (
 )
 from slam.ba.results import (
     BundleAdjustmentResult,
-    LargestFactorDiagnostic,
-    ProjectionEvaluation,
     ProjectionFactorMetadata,
 )
 from slam.tracking_database import TrackingDB
+
+
+@dataclass(frozen=True)
+class ProjectionEvaluation:
+    """Store one stereo factor evaluation at a particular state.
+
+    Attributes:
+        factor_error: GTSAM factor error at the supplied values.
+        projection: Predicted stereo image measurement.
+        left_distance_pixels: Left-image distance from projection to measurement.
+        right_distance_pixels: Right-image distance from projection to measurement.
+    """
+
+    factor_error: float
+    projection: gtsam.StereoPoint2
+    left_distance_pixels: float
+    right_distance_pixels: float
+
+
+@dataclass(frozen=True)
+class LargestFactorDiagnostic:
+    """Compare one projection factor before and after optimization.
+
+    Attributes:
+        factor_index: Index of the selected factor in the graph.
+        frame_id: Camera frame associated with the factor.
+        track_id: Landmark track associated with the factor.
+        measurement: Observed stereo image measurement.
+        initial: Evaluation using initial values.
+        optimized: Evaluation using optimized values.
+    """
+
+    factor_index: int
+    frame_id: int
+    track_id: int
+    measurement: gtsam.StereoPoint2
+    initial: ProjectionEvaluation
+    optimized: ProjectionEvaluation
 
 
 def factor_error(
@@ -127,9 +165,7 @@ def analyze_largest_initial_projection_factor(
     )
 
     factor = result.graph.at(metadata.factor_index)
-    measurement = stereo_point_from_triplet(
-        db.link_triplet(metadata.frame_id, metadata.track_id)
-    )
+    measurement = stereo_point_from_triplet(db.link_triplet(metadata.frame_id, metadata.track_id))
 
     initial_evaluation = evaluate_projection_factor(
         factor=factor,

@@ -1,8 +1,8 @@
 """Analyze stereo reprojection consistency along one tracked feature."""
 
 import logging
-from code.slam.ba.results import TrackReprojectionResult
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import gtsam
 import numpy as np
@@ -16,6 +16,27 @@ from slam.ba.gtsam_utils import (
 from slam.tracking_database import TrackingDB
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class TrackReprojectionResult:
+    """Results of reprojection and factor-error analysis for one feature track.
+
+    Attributes:
+        track_id: Selected tracking-database track identifier.
+        frame_ids: Ordered frames observing the track.
+        landmark_world: Landmark initialized from the final track observation.
+        reprojection_errors: Full stereo residual norm for each frame.
+        factor_errors: GTSAM factor error for each frame.
+        covariance: Stereo measurement covariance used by the factors.
+    """
+
+    track_id: int
+    frame_ids: list[int]
+    landmark_world: gtsam.Point3
+    reprojection_errors: np.ndarray
+    factor_errors: np.ndarray
+    covariance: np.ndarray
 
 
 def choose_track_with_min_length(
