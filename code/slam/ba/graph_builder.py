@@ -1,16 +1,19 @@
-import numpy as np
+"""Construct local stereo bundle-adjustment factor graphs."""
+
 import gtsam
+import numpy as np
 from gtsam.symbol_shorthand import C, Q
 
 from slam.tracking_database import TrackingDB
+
+from ..geometry.transforms import relative_extrinsic
 from .gtsam_utils import (
     convert_extrinsic_to_pose3,
     make_stereo_camera,
-    stereo_point_from_triplet
+    stereo_point_from_triplet,
 )
-from .window_selection import collect_window_tracks
 from .results import ProjectionFactorMetadata
-from ..geometry.transforms import relative_extrinsic
+from .window_selection import collect_window_tracks
 
 
 def build_local_bundle_graph(
@@ -26,102 +29,120 @@ def build_local_bundle_graph(
     list[int],
     list[ProjectionFactorMetadata],
 ]:
+    """Build a local stereo bundle-adjustment graph for one frame window.
+
+    Poses and landmarks are expressed in the coordinate system of the first
+    window frame. The first camera pose is anchored with a prior to remove
+    gauge freedom.
+
+    Args:
+        db: Tracking database containing stereo observations.
+        global_camera_matrices: World-to-camera extrinsics for all frames.
+        K: Stereo camera calibration.
+        window_frames: Consecutive frame IDs included in the local window.
+        min_track_observations: Minimum observations required for a track.
+        measurement_sigma_pixels: Isotropic stereo-measurement noise standard
+            deviation in pixels.
+
+    Returns:
+        The factor graph, initial values, inserted landmark track IDs, and
+        metadata for every stereo projection factor.
+
+    Raises:
+        ValueError: If the window is empty or configuration values are invalid.
+        RuntimeError: If no valid landmarks can be initialized in the window.
     """
-    Builds a local bundle adjustment graph for a consecutive frame window.
+    if not window_frames:
+        raise ValueError("Bundle-adjustment window must contain at least one frame.")
 
-    All poses and landmarks are represented in the coordinate system of the
-    first frame in the window.
+    if min_track_observations < 2:
+        raise ValueError("min_track_observations must be at least 2.")
 
-    Variables:
-        C(frame_id): camera pose for frame_id
-        Q(track_id): 3D landmark for track_id
+    if measurement_sigma_pixels <= 0:
+        raise ValueError("measurement_sigma_pixels must be positive.")
 
-    Factors:
-        - Prior on the first camera pose to remove gauge freedom.
-        - Stereo projection factors between observed cameras and landmarks.
-    """
     graph = gtsam.NonlinearFactorGraph()
     initial = gtsam.Values()
+
+    first_frame = window_frames[0]
+    T_world_to_first = global_camera_matrices[first_frame]
 
     measurement_noise = gtsam.noiseModel.Isotropic.Sigma(
         3,
         measurement_sigma_pixels,
     )
 
-    first_frame = window_frames[0]
-    T_global_to_first = global_camera_matrices[first_frame]
+    prior_noise = gtsam.noiseModel.Diagonal.Sigmas(
+        np.full(6, 1e-3, dtype=float)
+    )
 
-    # Select tracks before inserting poses. GTSAM requires every value in the
-    # initial estimate to be referenced by at least one graph factor.
     tracks_to_frames = collect_window_tracks(
         db=db,
         window_frames=window_frames,
         min_observations=min_track_observations,
     )
 
-    active_frames = {
-        frame_id
-        for track_frames in tracks_to_frames.values()
-        for frame_id in track_frames
-    }
-    active_frames.add(first_frame)  # Needed by the anchoring prior.
+    # Construct candidate cameras before choosing which poses enter the graph.
+    # Backprojection returns landmarks in the first-frame coordinate system.
+    stereo_cameras: dict[int, gtsam.StereoCamera] = {}
+    poses: dict[int, gtsam.Pose3] = {}
 
-
-    stereo_cameras = {}
-
-    # Insert camera poses in first-frame coordinates.
     for frame_id in window_frames:
-        if frame_id not in active_frames:
-            continue
-
-        T_global_to_frame = global_camera_matrices[frame_id]
+        T_world_to_frame = global_camera_matrices[frame_id]
 
         T_first_to_frame = relative_extrinsic(
-            T_global_to_ref=T_global_to_first,
-            T_global_to_frame=T_global_to_frame,
+            T_global_to_ref=T_world_to_first,
+            T_global_to_frame=T_world_to_frame,
         )
 
-        pose = convert_extrinsic_to_pose3(T_first_to_frame)
-        camera = make_stereo_camera(T_first_to_frame, K)
+        poses[frame_id] = convert_extrinsic_to_pose3(T_first_to_frame)
+        stereo_cameras[frame_id] = make_stereo_camera(T_first_to_frame, K)
 
-        initial.insert(C(frame_id), pose)
-        stereo_cameras[frame_id] = camera
+    # Retain only tracks whose initialization measurement can be backprojected.
+    initialized_landmarks: dict[int, gtsam.Point3] = {}
+    valid_tracks_to_frames: dict[int, list[int]] = {}
 
-    # Anchor first pose to avoid gauge freedom.
-    prior_noise = gtsam.noiseModel.Diagonal.Sigmas(
-        np.array([1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3])
-    )
+    for track_id, track_frames in tracks_to_frames.items():
+        initialization_frame = track_frames[-1]
+        initialization_measurement = stereo_point_from_triplet(
+            db.link_triplet(initialization_frame, track_id)
+        )
+
+        try:
+            landmark = stereo_cameras[initialization_frame].backproject(
+                initialization_measurement
+            )
+        except RuntimeError:
+            continue
+
+        initialized_landmarks[track_id] = landmark
+        valid_tracks_to_frames[track_id] = track_frames
+
+    if not valid_tracks_to_frames:
+        raise RuntimeError("No valid landmarks could be initialized in this window.")
+
+    active_frames = {first_frame}
+    for track_frames in valid_tracks_to_frames.values():
+        active_frames.update(track_frames)
+
+    # Insert only poses that are anchored or referenced by projection factors.
+    for frame_id in window_frames:
+        if frame_id in active_frames:
+            initial.insert(C(frame_id), poses[frame_id])
 
     graph.add(
         gtsam.PriorFactorPose3(
             C(first_frame),
-            initial.atPose3(C(first_frame)),
+            poses[first_frame],
             prior_noise,
         )
     )
 
-    # tracks_to_frames = collect_window_tracks(
-    #     db=db,
-    #     window_frames=window_frames,
-    #     min_observations=min_track_observations,
-    # )
-
     inserted_landmarks: list[int] = []
     projection_factor_metadata: list[ProjectionFactorMetadata] = []
 
-    for track_id, track_frames in tracks_to_frames.items():
-        init_frame = track_frames[-1]
-
-        init_measurement = stereo_point_from_triplet(
-            db.link_triplet(init_frame, track_id)
-        )
-
-        try:
-            landmark = stereo_cameras[init_frame].backproject(init_measurement)
-        except RuntimeError:
-            continue
-
-        initial.insert(Q(track_id), landmark)
+    for track_id, track_frames in valid_tracks_to_frames.items():
+        initial.insert(Q(track_id), initialized_landmarks[track_id])
         inserted_landmarks.append(track_id)
 
         for frame_id in track_frames:
@@ -130,14 +151,17 @@ def build_local_bundle_graph(
             )
 
             factor_index = graph.size()
-            factor = gtsam.GenericStereoFactor3D(
-                measurement,
-                measurement_noise,
-                C(frame_id),
-                Q(track_id),
-                K,
+
+            graph.add(
+                gtsam.GenericStereoFactor3D(
+                    measurement,
+                    measurement_noise,
+                    C(frame_id),
+                    Q(track_id),
+                    K,
+                )
             )
-            graph.add(factor)
+
             projection_factor_metadata.append(
                 ProjectionFactorMetadata(
                     factor_index=factor_index,
