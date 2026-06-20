@@ -6,7 +6,7 @@ from gtsam.symbol_shorthand import C, Q
 
 from slam.tracking_database import TrackingDB
 
-from ..geometry.transforms import relative_extrinsic
+from ..geometry.transforms import relative_world_to_camera_extrinsic
 from .gtsam_utils import (
     make_stereo_camera,
     pose3_from_world_to_camera_extrinsic,
@@ -84,17 +84,22 @@ def build_local_bundle_graph(
     # Backprojection returns landmarks in the first-frame coordinate system.
     stereo_cameras: dict[int, gtsam.StereoCamera] = {}
     poses: dict[int, gtsam.Pose3] = {}
-
     for frame_id in window_frames:
         T_world_to_frame = world_to_camera_extrinsics[frame_id]
 
-        T_first_to_frame = relative_extrinsic(
-            T_global_to_ref=T_world_to_first,
-            T_global_to_frame=T_world_to_frame,
+        T_first_to_frame = relative_world_to_camera_extrinsic(
+            world_to_reference=T_world_to_first,
+            world_to_frame=T_world_to_frame,
         )
 
-        poses[frame_id] = pose3_from_world_to_camera_extrinsic(T_first_to_frame)
-        stereo_cameras[frame_id] = make_stereo_camera(T_first_to_frame, calibration)
+        poses[frame_id] = pose3_from_world_to_camera_extrinsic(
+            T_first_to_frame
+        )
+
+        stereo_cameras[frame_id] = make_stereo_camera(
+            T_first_to_frame,
+            calibration,
+        )
 
     # Retain only tracks whose initialization measurement can be backprojected.
     initialized_landmarks: dict[int, gtsam.Point3] = {}
