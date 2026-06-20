@@ -1,30 +1,33 @@
+"""Build and load the feature-tracking database for a stereo sequence."""
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
 
 import cv2
 import numpy as np
 from tqdm import tqdm
 
-from ..io.calibration import read_calib
-from ..geometry.triangulation import triangulate_opencv
-from ..geometry.ransac import ransac_pnp
-from ..features.detectors import extract_features, FeatureType
+from ..features.detectors import FeatureType, extract_features
 from ..features.matching import match_and_filter
+from ..geometry.ransac import ransac_pnp
+from ..geometry.triangulation import triangulate_opencv
+from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import read_images
 from ..pipeline.stereo_pipeline import DEVIATION_THRESHOLD
-from ..tracking_database import TrackingDB, Link
+from ..tracking_database import Link, TrackingDB
+
 
 @dataclass
 class DatabaseFrameData:
     """Container for the data needed to add one frame to the TrackingDB."""
+
     left_features: np.ndarray
-    links: List[Link]
+    links: list[Link]
     points_3d: np.ndarray
 
 
-def _links_to_points(links: List[Link]) -> Tuple[np.ndarray, np.ndarray]:
-    """Converts frame links into aligned left and right image points."""
+def _links_to_points(links: list[Link]) -> tuple[np.ndarray, np.ndarray]:
+    """Convert frame links into aligned left and right image points."""
     left_pts = np.array([link.left_keypoint() for link in links], dtype=np.float64)
     right_pts = np.array([link.right_keypoint() for link in links], dtype=np.float64)
     return left_pts, right_pts
@@ -32,8 +35,8 @@ def _links_to_points(links: List[Link]) -> Tuple[np.ndarray, np.ndarray]:
 
 def _make_invalid_temporal_matches(
     num_prev_features: int,
-) -> Tuple[List[cv2.DMatch], List[bool]]:
-    """Creates invalid dummy matches, one for each previous-frame feature."""
+) -> tuple[list[cv2.DMatch], list[bool]]:
+    """Create invalid dummy matches, one for each previous-frame feature."""
     matches = [
         cv2.DMatch(_queryIdx=i, _trainIdx=0, _distance=float("inf"))
         for i in range(num_prev_features)
@@ -43,7 +46,7 @@ def _make_invalid_temporal_matches(
 
 
 def _empty_descriptor_array(descriptors: np.ndarray | None) -> np.ndarray:
-    """Returns an empty descriptor array with a compatible descriptor dimension."""
+    """Return an empty descriptor array with a compatible descriptor dimension."""
     if descriptors is None:
         return np.empty((0, 0))
 
@@ -51,12 +54,12 @@ def _empty_descriptor_array(descriptors: np.ndarray | None) -> np.ndarray:
 
 
 def _compute_stereo_inlier_mask(
-    kp_left: List[cv2.KeyPoint],
-    kp_right: List[cv2.KeyPoint],
-    matches: List[cv2.DMatch],
+    kp_left: list[cv2.KeyPoint],
+    kp_right: list[cv2.KeyPoint],
+    matches: list[cv2.DMatch],
     deviation_threshold: float,
-) -> List[bool]:
-    """Computes stereo inliers using the vertical-deviation criterion."""
+) -> list[bool]:
+    """Compute stereo inliers using the vertical-deviation criterion."""
     inliers = []
 
     for match in matches:
@@ -76,9 +79,10 @@ def _create_frame_data(
     P1: np.ndarray,
     P2: np.ndarray,
 ) -> DatabaseFrameData:
-    """
-    Extracts stereo features for one frame and converts valid stereo matches
-    into TrackingDB-compatible descriptors, links, and aligned 3D points.
+    """Extract stereo features for one frame.
+
+    Convert valid stereo matches into TrackingDB-compatible descriptors, links,
+    and aligned 3D points.
     """
     left_img, right_img = read_images(frame_idx)
 
@@ -155,9 +159,8 @@ def _match_temporal_features(
     P1: np.ndarray,
     P2: np.ndarray,
     max_depth: float = 300.0,
-) -> Tuple[List[cv2.DMatch], List[bool]]:
-    """
-    Matches descriptors from the previous left frame to the current left frame.
+) -> tuple[list[cv2.DMatch], list[bool]]:
+    """Match descriptors from the previous left frame to the current left frame.
 
     The TrackingDB expects one temporal match entry per previous-frame feature.
     We therefore first compute a raw 1-NN match for each previous descriptor,
@@ -178,18 +181,15 @@ def _match_temporal_features(
     if cur_left_features is None or len(cur_left_features) == 0:
         return _make_invalid_temporal_matches(num_prev_features)
 
-    if feature_type in ("orb", "akaze"):
-        norm_type = cv2.NORM_HAMMING
-    else:
-        norm_type = cv2.NORM_L2
+    norm_type = cv2.NORM_HAMMING if feature_type in ("orb", "akaze") else cv2.NORM_L2
 
     matcher = cv2.BFMatcher(norm_type, crossCheck=False)
     raw_matches = matcher.match(prev_left_features, cur_left_features)
 
-    match_by_query = {m.queryIdx: m for m in raw_matches}
+    match_by_query = {match.queryIdx: match for match in raw_matches}
 
-    full_matches: List[cv2.DMatch] = []
-    full_inliers: List[bool] = [False] * num_prev_features
+    full_matches: list[cv2.DMatch] = []
+    full_inliers: list[bool] = [False] * num_prev_features
 
     for query_idx in range(num_prev_features):
         if query_idx in match_by_query:
@@ -248,14 +248,14 @@ def _match_temporal_features(
     candidate_cur_right = np.asarray(candidate_cur_right)
 
     T_ransac, ransac_inlier_mask = ransac_pnp(
-        candidate_prev_3d,
-        candidate_cur_left,
-        candidate_prev_left,
-        candidate_prev_right,
-        candidate_cur_right,
-        K,
-        P1,
-        P2,
+        points_3d=candidate_prev_3d,
+        left1=candidate_cur_left,
+        left0=candidate_prev_left,
+        right0=candidate_prev_right,
+        right1=candidate_cur_right,
+        intrinsic_matrix=K,
+        left_projection_matrix=P1,
+        right_projection_matrix=P2,
     )
 
     if T_ransac is None or ransac_inlier_mask is None:
@@ -263,28 +263,32 @@ def _match_temporal_features(
 
     ransac_inlier_mask = np.asarray(ransac_inlier_mask, dtype=bool).flatten()
 
-    for query_idx, is_inlier in zip(candidate_query_indices, ransac_inlier_mask):
+    for query_idx, is_inlier in zip(
+        candidate_query_indices,
+        ransac_inlier_mask,
+        strict=True,
+    ):
         full_inliers[query_idx] = bool(is_inlier)
 
     return full_matches, full_inliers
 
 
 def _count_frames(sequence_dir: Path) -> int:
-    """Counts the number of frames in a KITTI-style sequence directory."""
+    """Count the number of frames in a KITTI-style sequence directory."""
     image_dir = sequence_dir / "image_0"
     return len(list(image_dir.glob("*.png")))
 
 
 def load_tracking_database(base_filename: str | Path) -> TrackingDB:
-    """
-    Loads a TrackingDB saved with TrackingDB.serialize().
+    """Load a TrackingDB saved with ``TrackingDB.serialize()``.
 
     Returns:
-         db: the loaded tracking database.
+        The loaded tracking database.
     """
     db = TrackingDB()
     db.load(str(base_filename))
     return db
+
 
 def build_tracking_database(
     sequence_dir: Path,
@@ -293,22 +297,17 @@ def build_tracking_database(
     num_features: int = 3000,
     ratio_threshold: float = 0.75,
     deviation_threshold: float = DEVIATION_THRESHOLD,
-) -> Tuple[TrackingDB, List[float]]:
-    """
-    Builds a TrackingDB over a sequence of stereo frames.
+) -> tuple[TrackingDB, list[float]]:
+    """Build a TrackingDB over a sequence of stereo frames.
 
     Returns:
-        db: tracking database containing all tracks.
-        inlier_percentages: percentage of RANSAC-PnP inliers per frame transition.
+        A tracking database and the RANSAC-PnP inlier percentage for each
+        consecutive frame transition.
     """
     total_frames = _count_frames(sequence_dir)
+    num_frames = total_frames if num_frames is None else min(num_frames, total_frames)
 
-    if num_frames is None:
-        num_frames = total_frames
-    else:
-        num_frames = min(num_frames, total_frames)
-
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
     K = P1[:, :3]
 
     db = TrackingDB()
@@ -352,9 +351,7 @@ def build_tracking_database(
             if len(temporal_inliers) == 0:
                 inlier_percentages.append(0.0)
             else:
-                inlier_percentages.append(
-                    100.0 * sum(temporal_inliers) / len(temporal_inliers)
-                )
+                inlier_percentages.append(100.0 * sum(temporal_inliers) / len(temporal_inliers))
 
         prev_frame_data = cur_frame_data
 

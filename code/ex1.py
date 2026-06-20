@@ -1,11 +1,11 @@
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
 import random
-from typing import Tuple, List
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
 
 from slam.features.detectors import extract_features
-from slam.features.matching import match_features, filter_matches_ratio, RATIO_THRESHOLD
+from slam.features.matching import RATIO_THRESHOLD, filter_matches_ratio, match_features
 from slam.io.image_loader import read_images
 
 # --- Algorithm Parameters ---
@@ -28,12 +28,12 @@ def vis_keypoints(img1: np.ndarray, img2: np.ndarray, kp1: list, kp2: list):
     img2_kp = cv2.drawKeypoints(img2, kp2, None, color=COLOR_KP, flags=0)
 
     fig, axes = plt.subplots(1, 2, figsize=FIG_SIZE)
-    fig.suptitle('Key-points pixel locations')
+    fig.suptitle("Key-points pixel locations")
 
     axes[0].imshow(cv2.cvtColor(img1_kp, cv2.COLOR_BGR2RGB))
-    axes[0].set_title('Left Image')
+    axes[0].set_title("Left Image")
     axes[1].imshow(cv2.cvtColor(img2_kp, cv2.COLOR_BGR2RGB))
-    axes[1].set_title('Right Image')
+    axes[1].set_title("Right Image")
     plt.show()
 
 
@@ -47,14 +47,21 @@ def print_first_descriptors(des1: np.ndarray, num_to_print: int = NUM_DESCRIPTOR
         print(f"Descriptor {i + 1}:\n{des1[i]}")
 
 
-def vis_matches(img1, kp1, img2, kp2, matches: list, num_to_draw: int = NUM_MATCHES_TO_DRAW, title: str = ""):
+def vis_matches(
+    img1, kp1, img2, kp2, matches: list, num_to_draw: int = NUM_MATCHES_TO_DRAW, title: str = ""
+):
     """PDF: Plots a specified number of matches connecting the two images."""
     sample_size = min(num_to_draw, len(matches))
     random_matches = random.sample(matches, sample_size)
 
     img_matches = cv2.drawMatches(
-        img1, kp1, img2, kp2, random_matches, None,
-        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+        img1,
+        kp1,
+        img2,
+        kp2,
+        random_matches,
+        None,
+        flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
     )
 
     plt.figure(figsize=FIG_SIZE)
@@ -67,6 +74,7 @@ def vis_matches(img1, kp1, img2, kp2, matches: list, num_to_draw: int = NUM_MATC
 # PART 1.4: Significance Test
 # ==========================================
 
+
 def find_near_miss_match(knn_matches: list, ratio_threshold: float):
     """LOGIC: Finds the rejected match with the ratio closest to the threshold (most likely to be correct).
 
@@ -75,7 +83,7 @@ def find_near_miss_match(knn_matches: list, ratio_threshold: float):
     """
 
     best_failed_match = None
-    lowest_failed_ratio = float('inf')  # Start infinitely high
+    lowest_failed_ratio = float("inf")  # Start infinitely high
 
     for m, n in knn_matches:
         # Check if it failed the significance test
@@ -105,17 +113,18 @@ def vis_single_match_as_dots(img1, img2, kp1, kp2, match, title: str):
     cv2.circle(img2_color, (int(pt2[0]), int(pt2[1])), DOT_RADIUS, COLOR_DOT, -1)
 
     axes[0].imshow(cv2.cvtColor(img1_color, cv2.COLOR_BGR2RGB))
-    axes[0].set_title(f'Left Image Point: ({pt1[0]:.1f}, {pt1[1]:.1f})')
+    axes[0].set_title(f"Left Image Point: ({pt1[0]:.1f}, {pt1[1]:.1f})")
     axes[1].imshow(cv2.cvtColor(img2_color, cv2.COLOR_BGR2RGB))
-    axes[1].set_title(f'Right Image Point: ({pt2[0]:.1f}, {pt2[1]:.1f})')
+    axes[1].set_title(f"Right Image Point: ({pt2[0]:.1f}, {pt2[1]:.1f})")
     plt.show()
 
 
 # ==========================================
 # MAIN PIPELINE FUNCTION
 # ==========================================
-def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple[
-    List[cv2.KeyPoint], np.ndarray, List[cv2.KeyPoint], np.ndarray, List[cv2.DMatch]]:
+def find_features(
+    frame_idx: int = FRAME_INDEX, visualize: bool = True
+) -> tuple[list[cv2.KeyPoint], np.ndarray, list[cv2.KeyPoint], np.ndarray, list[cv2.DMatch]]:
     """Executes the full feature detection, description, and matching pipeline."""
     print(f"\n--- Processing Frame {frame_idx:06d} ---")
     random.seed(RANDOM_SEED)
@@ -140,17 +149,30 @@ def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple
 
     if visualize:
         raw_matches_13 = [m[0] for m in knn_matches]
-        vis_matches(img1, kp1, img2, kp2, raw_matches_13, title='1.3: 20 Random Matches (No significance test)')
+        vis_matches(
+            img1,
+            kp1,
+            img2,
+            kp2,
+            raw_matches_13,
+            title="1.3: 20 Random Matches (No significance test)",
+        )
 
     # --- Execute 1.4 ---
     good_matches, rejected_matches = filter_matches_ratio(knn_matches)
 
     if visualize:
-        vis_matches(img1, kp1, img2, kp2, good_matches,
-                    title=f"1.4: 20 Random Matches after Ratio Test (Ratio: {RATIO_THRESHOLD})")
+        vis_matches(
+            img1,
+            kp1,
+            img2,
+            kp2,
+            good_matches,
+            title=f"1.4: 20 Random Matches after Ratio Test (Ratio: {RATIO_THRESHOLD})",
+        )
 
         # Print 1.4 stats
-        print(f"\n1.4 Statistics:")
+        print("\n1.4 Statistics:")
         print(f"Ratio value used: {RATIO_THRESHOLD}")
         print(f"Total initial matches: {len(knn_matches)}")
         print(f"Matches discarded: {len(rejected_matches)}")
@@ -159,9 +181,17 @@ def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple
         # Visualize 1.4 failed match using the "Near Miss" logic
         failed_match, near_miss_ratio = find_near_miss_match(knn_matches, RATIO_THRESHOLD)
         if failed_match:
-            print(f"\nFound the rejected match with the best ratio (Near miss): {near_miss_ratio:.4f}")
-            vis_single_match_as_dots(img1, img2, kp1, kp2, failed_match,
-                                     f'1.4: "Near Miss" Rejected Match (Ratio: {near_miss_ratio:.4f})')
+            print(
+                f"\nFound the rejected match with the best ratio (Near miss): {near_miss_ratio:.4f}"
+            )
+            vis_single_match_as_dots(
+                img1,
+                img2,
+                kp1,
+                kp2,
+                failed_match,
+                f'1.4: "Near Miss" Rejected Match (Ratio: {near_miss_ratio:.4f})',
+            )
         else:
             print("\nCould not find a rejected match.")
 
@@ -169,5 +199,7 @@ def find_features(frame_idx: int = FRAME_INDEX, visualize: bool = True) -> Tuple
 
 
 if __name__ == "__main__":
-    final_kp1, final_des1, final_kp2, final_des2, final_matches = find_features(FRAME_INDEX, visualize=True)
+    final_kp1, final_des1, final_kp2, final_des2, final_matches = find_features(
+        FRAME_INDEX, visualize=True
+    )
     print("Pipeline execution complete.")

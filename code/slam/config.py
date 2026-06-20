@@ -1,3 +1,5 @@
+"""Project-wide paths and dataset configuration."""
+
 from pathlib import Path
 
 CODE_DIR = Path(__file__).resolve().parents[1]
@@ -8,6 +10,8 @@ OUTPUTS_DIR = PROJECT_DIR / "outputs"
 
 SEQUENCE_ID = "00"
 SEQUENCE_DIR = DATASET_DIR / "sequences" / SEQUENCE_ID
+
+CALIBRATION_PATH = SEQUENCE_DIR / "calib.txt"
 
 EX3_OUTPUT_DIR = OUTPUTS_DIR / "ex3"
 EX4_OUTPUT_DIR = OUTPUTS_DIR / "ex4"

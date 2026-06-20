@@ -1,16 +1,16 @@
+import sys
+from pathlib import Path
+
 import cv2
 import matplotlib.pyplot as plt
-import numpy as np
-from pathlib import Path
-import sys
 from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "code"))
 
-from slam.tracking_database import TrackingDB
-from slam.io.image_loader import read_images
 from slam.config import PROJECT_DIR
+from slam.io.image_loader import read_images
+from slam.tracking_database import TrackingDB
 
 # ============================================================================
 # CONFIGURATION
@@ -18,6 +18,7 @@ from slam.config import PROJECT_DIR
 
 OUTPUT_DIR = PROJECT_DIR / "outputs" / "ex4"
 DB_PATH = OUTPUT_DIR / "tracking_db"
+
 
 def main():
     print("=" * 60)
@@ -43,16 +44,18 @@ def main():
         if len(tracks_cur & tracks_next) == 0:
             zero_connectivity_frames.append(fid)
 
-    print(f"Found {len(zero_connectivity_frames)} frames with zero connectivity: {zero_connectivity_frames}")
+    print(
+        f"Found {len(zero_connectivity_frames)} frames with zero connectivity: {zero_connectivity_frames}"
+    )
 
     from slam.features.matching import match_and_filter
-    
+
     # Plot the frames with zero connectivity
     for fid in zero_connectivity_frames:
         print(f"Processing zero-connectivity frame {fid} -> {fid + 1}")
         left_img_cur, _ = read_images(fid)
         left_img_next, _ = read_images(fid + 1)
-        
+
         # We need 4 copies of images for the 2x2 grid
         def to_bgr(img):
             if len(img.shape) == 2:
@@ -80,41 +83,48 @@ def main():
         des_next = db.features(fid + 1)
         links_cur = db.all_frame_links(fid)
         links_next = db.all_frame_links(fid + 1)
-        
+
         good_matches = []
         if des_cur is not None and des_next is not None and len(des_cur) > 0 and len(des_next) > 0:
             good_matches = match_and_filter(des_cur, des_next, feature_type="akaze", ratio=0.85)
-            
+
             for m in good_matches:
                 link_cur = links_cur[m.queryIdx]
                 link_next = links_next[m.trainIdx]
-                cv2.circle(img_cur_lowe, (int(link_cur.x_left), int(link_cur.y)), 3, (0, 255, 0), -1)
-                cv2.circle(img_next_lowe, (int(link_next.x_left), int(link_next.y)), 3, (0, 255, 0), -1)
+                cv2.circle(
+                    img_cur_lowe, (int(link_cur.x_left), int(link_cur.y)), 3, (0, 255, 0), -1
+                )
+                cv2.circle(
+                    img_next_lowe, (int(link_next.x_left), int(link_next.y)), 3, (0, 255, 0), -1
+                )
 
         # Plot 2x2 grid
         fig, axes = plt.subplots(2, 2, figsize=(16, 10))
-        fig.suptitle(f"Zero Connectivity: Frame {fid} to Frame {fid + 1}\n"
-                     f"Inliers: {len(tracks_cur)} (F{fid}), {len(tracks_next)} (F{fid+1}) | "
-                     f"Lowe's Matches: {len(good_matches)}")
-        
+        fig.suptitle(
+            f"Zero Connectivity: Frame {fid} to Frame {fid + 1}\n"
+            f"Inliers: {len(tracks_cur)} (F{fid}), {len(tracks_next)} (F{fid + 1}) | "
+            f"Lowe's Matches: {len(good_matches)}"
+        )
+
         axes[0, 0].imshow(cv2.cvtColor(img_cur_inliers, cv2.COLOR_BGR2RGB))
         axes[0, 0].set_title(f"Frame {fid} (RANSAC Inliers)")
-        axes[0, 0].axis('off')
-        
+        axes[0, 0].axis("off")
+
         axes[0, 1].imshow(cv2.cvtColor(img_next_inliers, cv2.COLOR_BGR2RGB))
         axes[0, 1].set_title(f"Frame {fid + 1} (RANSAC Inliers)")
-        axes[0, 1].axis('off')
+        axes[0, 1].axis("off")
 
         axes[1, 0].imshow(cv2.cvtColor(img_cur_lowe, cv2.COLOR_BGR2RGB))
         axes[1, 0].set_title(f"Frame {fid} (Lowe's Ratio Matches)")
-        axes[1, 0].axis('off')
-        
+        axes[1, 0].axis("off")
+
         axes[1, 1].imshow(cv2.cvtColor(img_next_lowe, cv2.COLOR_BGR2RGB))
         axes[1, 1].set_title(f"Frame {fid + 1} (Lowe's Ratio Matches)")
-        axes[1, 1].axis('off')
-        
+        axes[1, 1].axis("off")
+
         plt.tight_layout()
         plt.show()
+
 
 if __name__ == "__main__":
     main()

@@ -1,21 +1,38 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
+from slam.geometry.transforms import (
+    camera_centers_from_world_to_camera_extrinsics,
+)
 from gtsam.symbol_shorthand import C, Q
 
-from slam.ba.window_selection import _bundle_camera_centers, _bundle_landmarks
+
+def _bundle_camera_centers(result) -> np.ndarray:
+    return np.vstack(
+        [
+            np.asarray(
+                result.optimized.atPose3(C(frame_id)).translation(),
+                dtype=float,
+            ).reshape(3)
+            for frame_id in result.window_frames
+        ]
+    )
 
 
-def camera_centers_from_extrinsic(extrinsic: np.ndarray) -> np.ndarray:
-    """Computes camera centers C = -R^T t from 3x4 extrinsic matrices."""
-    centers = []
+def _bundle_landmarks(result) -> np.ndarray:
+    """Extracts optimized landmark locations for a local bundle window."""
+    landmarks = []
 
-    for P in extrinsic:
-        R = P[:, :3]
-        t = P[:, 3]
-        centers.append(-R.T @ t)
+    for track_id in result.track_ids:
+        try:
+            point = result.optimized.atPoint3(Q(track_id))
+        except RuntimeError:
+            continue
 
-    return np.asarray(centers)
+        landmarks.append(np.asarray(point, dtype=float).reshape(3))
+
+    return np.vstack(landmarks) if landmarks else np.empty((0, 3), dtype=float)
 
 
 def plot_trajectory(
@@ -23,7 +40,7 @@ def plot_trajectory(
     gt_extrinsic: np.ndarray,
 ) -> None:
     """Plots estimated and ground-truth camera trajectories from above."""
-    gt_positions = camera_centers_from_extrinsic(gt_extrinsic)
+    gt_positions = camera_centers_from_world_to_camera_extrinsics(gt_extrinsic)
 
     plt.figure(figsize=(10, 8))
 

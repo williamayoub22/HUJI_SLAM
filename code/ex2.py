@@ -1,12 +1,16 @@
-
-from typing import Sequence
+from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.geometry.triangulation import custom_triangulation, triangulate_opencv
-from slam.io.calibration import read_calib
-from slam.pipeline.stereo_pipeline import StereoMatchData, load_frame_data, DEVIATION_THRESHOLD, get_inlier_points
+from slam.geometry.triangulation import triangulate_dlt, triangulate_opencv
+from slam.io.calibration import read_stereo_calibration
+from slam.pipeline.stereo_pipeline import (
+    DEVIATION_THRESHOLD,
+    StereoMatchData,
+    get_inlier_points,
+    load_frame_data,
+)
 from slam.visualization.visualization import plot_point_cloud_on_axis
 
 FRAME_INDEX = 0
@@ -45,13 +49,27 @@ def plot_matches_by_rejection(
     show_image(ax_left, data.left_img, "Left Image")
     show_image(ax_right, data.right_img, "Right Image")
 
-    ax_left.scatter(data.left_pts[outlier_mask, 0], data.left_pts[outlier_mask, 1],
-                    c="cyan", s=15, label="Rejected (Outliers)")
-    ax_right.scatter(data.right_pts[outlier_mask, 0], data.right_pts[outlier_mask, 1], c="cyan", s=15)
+    ax_left.scatter(
+        data.left_pts[outlier_mask, 0],
+        data.left_pts[outlier_mask, 1],
+        c="cyan",
+        s=15,
+        label="Rejected (Outliers)",
+    )
+    ax_right.scatter(
+        data.right_pts[outlier_mask, 0], data.right_pts[outlier_mask, 1], c="cyan", s=15
+    )
 
-    ax_left.scatter(data.left_pts[inlier_mask, 0], data.left_pts[inlier_mask, 1],
-                    c="orange", s=15, label="Accepted (Inliers)")
-    ax_right.scatter(data.right_pts[inlier_mask, 0], data.right_pts[inlier_mask, 1], c="orange", s=15)
+    ax_left.scatter(
+        data.left_pts[inlier_mask, 0],
+        data.left_pts[inlier_mask, 1],
+        c="orange",
+        s=15,
+        label="Accepted (Inliers)",
+    )
+    ax_right.scatter(
+        data.right_pts[inlier_mask, 0], data.right_pts[inlier_mask, 1], c="orange", s=15
+    )
 
     fig.legend(loc="lower center", ncol=2)
     plt.suptitle(f"Rectified Stereo Match Rejection (Threshold: {threshold} px)")
@@ -74,7 +92,7 @@ def print_rejection_statistics(
 
 
 def section_2_1(frame_idx: int = FRAME_INDEX) -> StereoMatchData:
-    print(f"--- Section 2.1 ---")
+    print("--- Section 2.1 ---")
 
     data = load_frame_data(frame_idx)
 
@@ -88,7 +106,7 @@ def section_2_2(
     data: StereoMatchData,
     threshold: float = DEVIATION_THRESHOLD,
 ) -> int:
-    print(f"--- Section 2.2 ---")
+    print("--- Section 2.2 ---")
 
     num_discarded = int(np.sum(data.deviations > threshold))
 
@@ -104,12 +122,12 @@ def section_2_3(
     data: StereoMatchData,
     threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
-    print(f"--- Section 2.3 ---")
+    print("--- Section 2.3 ---")
 
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
     left_inliers, right_inliers = get_inlier_points(data, threshold)
 
-    custom_points = custom_triangulation(P1, P2, left_inliers, right_inliers)
+    custom_points = triangulate_dlt(P1, P2, left_inliers, right_inliers)
     opencv_points = triangulate_opencv(P1, P2, left_inliers, right_inliers)
 
     fig = plt.figure(figsize=(16, 7))
@@ -139,9 +157,9 @@ def section_2_4(
     frames_to_test: Sequence[int] = DEFAULT_FRAMES,
     threshold: float = DEVIATION_THRESHOLD,
 ) -> None:
-    print(f"--- Section 2.4 ---")
+    print("--- Section 2.4 ---")
 
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
     fig = plt.figure(figsize=(16, 14))
 
     for subplot_idx, frame_idx in enumerate(frames_to_test[:4], start=1):

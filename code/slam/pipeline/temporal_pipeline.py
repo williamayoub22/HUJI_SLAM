@@ -1,26 +1,26 @@
 from dataclasses import dataclass
-from typing import List
 
 import cv2
 import numpy as np
 
-from ..io.image_loader import read_images
 from ..features.detectors import FeatureType
 from ..features.matching import (
     RATIO_THRESHOLD,
     extract_and_match_features,
     get_matched_points,
 )
+from ..io.image_loader import read_images
 
 
 @dataclass
 class TemporalMatchData:
     """Container for temporal matches between two left-camera frames."""
+
     left0_img: np.ndarray
     left1_img: np.ndarray
-    kp_left0: List[cv2.KeyPoint]
-    kp_left1: List[cv2.KeyPoint]
-    matches: List[cv2.DMatch]
+    kp_left0: list[cv2.KeyPoint]
+    kp_left1: list[cv2.KeyPoint]
+    matches: list[cv2.DMatch]
     left0_pts: np.ndarray
     left1_pts: np.ndarray
 

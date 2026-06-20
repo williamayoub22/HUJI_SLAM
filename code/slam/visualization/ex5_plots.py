@@ -1,10 +1,11 @@
 from pathlib import Path
+
 import cv2
 import gtsam
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slam.ba.results import LargestFactorDiagnostic
+from code.slam.analysis.bundle_diagnostics import LargestFactorDiagnostic
 
 
 def _make_track_x_axis(frame_ids: list[int], use_track_index: bool):
@@ -132,10 +133,7 @@ def plot_largest_factor_diagnostic(
             diagnostic.initial.projection.uL(),
             diagnostic.initial.projection.v(),
         ),
-        title=(
-            "Initial left image\n"
-            f"distance = {diagnostic.initial.left_distance_pixels:.2f}px"
-        ),
+        title=(f"Initial left image\ndistance = {diagnostic.initial.left_distance_pixels:.2f}px"),
     )
 
     _draw_measurement_and_projection(
@@ -146,10 +144,7 @@ def plot_largest_factor_diagnostic(
             diagnostic.initial.projection.uR(),
             diagnostic.initial.projection.v(),
         ),
-        title=(
-            "Initial right image\n"
-            f"distance = {diagnostic.initial.right_distance_pixels:.2f}px"
-        ),
+        title=(f"Initial right image\ndistance = {diagnostic.initial.right_distance_pixels:.2f}px"),
     )
 
     _draw_measurement_and_projection(
@@ -161,8 +156,7 @@ def plot_largest_factor_diagnostic(
             diagnostic.optimized.projection.v(),
         ),
         title=(
-            "Optimized left image\n"
-            f"distance = {diagnostic.optimized.left_distance_pixels:.2f}px"
+            f"Optimized left image\ndistance = {diagnostic.optimized.left_distance_pixels:.2f}px"
         ),
     )
 
@@ -175,8 +169,7 @@ def plot_largest_factor_diagnostic(
             diagnostic.optimized.projection.v(),
         ),
         title=(
-            "Optimized right image\n"
-            f"distance = {diagnostic.optimized.right_distance_pixels:.2f}px"
+            f"Optimized right image\ndistance = {diagnostic.optimized.right_distance_pixels:.2f}px"
         ),
     )
 
@@ -207,13 +200,15 @@ def plot_keyframes_and_landmarks_top_down(
     gt_positions: np.ndarray,
     output_path: Path,
 ) -> None:
-    estimated_positions = np.vstack([
-        np.asarray(
-            global_keyframe_poses[frame_id].translation(),
-            dtype=float,
-        ).reshape(3)
-        for frame_id in keyframe_ids
-    ])
+    estimated_positions = np.vstack(
+        [
+            np.asarray(
+                global_keyframe_poses[frame_id].translation(),
+                dtype=float,
+            ).reshape(3)
+            for frame_id in keyframe_ids
+        ]
+    )
 
     figure, axis = plt.subplots(figsize=(11, 8))
 
@@ -298,4 +293,3 @@ def plot_keyframe_localization_error(
     plt.close(figure)
 
     return errors
-

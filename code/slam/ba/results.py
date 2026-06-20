@@ -1,23 +1,20 @@
+"""Data containers produced by local bundle-adjustment construction and solving."""
+
 from dataclasses import dataclass
+
 import gtsam
-import numpy as np
 
 
-@dataclass
-class TrackReprojectionResult:
-    """
-    Holds the numerical results of Exercise 5.1.
-    """
-    track_id: int
-    frame_ids: list[int]
-    landmark_global: gtsam.Point3
-    reprojection_errors: np.ndarray
-    factor_errors: np.ndarray
-    covariance: np.ndarray
-
-
-@dataclass
+@dataclass(frozen=True)
 class ProjectionFactorMetadata:
+    """Identify one stereo projection factor in a local BA graph.
+
+    Attributes:
+        factor_index: Index of the factor in the nonlinear factor graph.
+        frame_id: Frame associated with the camera variable.
+        track_id: Track associated with the landmark variable.
+    """
+
     factor_index: int
     frame_id: int
     track_id: int
@@ -25,6 +22,22 @@ class ProjectionFactorMetadata:
 
 @dataclass
 class BundleAdjustmentResult:
+    """Store the graph, estimates, and error statistics of one BA window.
+
+    Attributes:
+        window_frames: Frame IDs optimized in this local window.
+        graph: Constructed nonlinear factor graph.
+        initial: Initial pose and landmark estimates.
+        optimized: Estimates returned by the optimizer.
+        track_ids: Track IDs represented as landmarks in the graph.
+        projection_factor_metadata: Metadata for stereo projection factors.
+        initial_error: Total graph error before optimization.
+        final_error: Total graph error after optimization.
+        num_factors: Number of factors in the graph.
+        average_initial_error: Initial graph error divided by factor count.
+        average_final_error: Final graph error divided by factor count.
+    """
+
     window_frames: list[int]
     graph: gtsam.NonlinearFactorGraph
     initial: gtsam.Values
@@ -38,28 +51,16 @@ class BundleAdjustmentResult:
     average_final_error: float
 
 
-@dataclass
-class ProjectionEvaluation:
-    factor_error: float
-    projection: gtsam.StereoPoint2
-    left_distance_pixels: float
-    right_distance_pixels: float
-
-
-@dataclass
-class LargestFactorDiagnostic:
-    factor_index: int
-    frame_id: int
-    track_id: int
-
-    measurement: gtsam.StereoPoint2
-
-    initial: ProjectionEvaluation
-    optimized: ProjectionEvaluation
-
-@dataclass
-
+@dataclass(frozen=True)
 class BundleWindowSolution:
+    """Associate a solved local BA result with its keyframe interval.
+
+    Attributes:
+        start_frame: First keyframe of the window.
+        end_frame: Last keyframe of the window.
+        result: Optimization result for the window.
+    """
+
     start_frame: int
     end_frame: int
     result: BundleAdjustmentResult

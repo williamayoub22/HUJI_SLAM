@@ -1,14 +1,12 @@
 from dataclasses import dataclass
-from typing import List
 
 import cv2
 import numpy as np
 
-from ..io.image_loader import load_matches_between_images
 from ..features.matching import get_matched_points
-from ..io.calibration import read_calib
-from ..geometry.triangulation import custom_triangulation, triangulate_opencv
-
+from ..geometry.triangulation import triangulate_dlt, triangulate_opencv
+from ..io.calibration import read_stereo_calibration
+from ..io.image_loader import load_matches_between_images
 
 DEVIATION_THRESHOLD = 2.0
 MAX_DEPTH = 300.0
@@ -17,11 +15,12 @@ MAX_DEPTH = 300.0
 @dataclass
 class StereoMatchData:
     """Container for one stereo pair, its matches, and vertical deviations."""
+
     left_img: np.ndarray
     right_img: np.ndarray
-    kp_left: List[cv2.KeyPoint]
-    kp_right: List[cv2.KeyPoint]
-    matches: List[cv2.DMatch]
+    kp_left: list[cv2.KeyPoint]
+    kp_right: list[cv2.KeyPoint]
+    matches: list[cv2.DMatch]
     left_pts: np.ndarray
     right_pts: np.ndarray
     deviations: np.ndarray
@@ -30,6 +29,7 @@ class StereoMatchData:
 @dataclass
 class StereoPointCloud:
     """Container for a stereo pair and its triangulated 3D point cloud."""
+
     frame_idx: int
     data: StereoMatchData
     left_inliers: np.ndarray
@@ -44,20 +44,20 @@ def load_frame_data(
     use_ratio_test: bool = False,
 ) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-    kp_left, kp_right, left_img, matches, right_img = load_matches_between_images(
+    left_keypoints, right_keypoints, left_image, right_image, matches = load_matches_between_images(
         frame_idx,
         feature_type=feature_type,
         num_features=num_features,
         use_ratio_test=use_ratio_test,
     )
-    left_pts, right_pts = get_matched_points(kp_left, kp_right, matches)
+    left_pts, right_pts = get_matched_points(left_keypoints, right_keypoints, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
 
     return StereoMatchData(
-        left_img=left_img,
-        right_img=right_img,
-        kp_left=kp_left,
-        kp_right=kp_right,
+        left_img=left_image,
+        right_img=right_image,
+        kp_left=left_keypoints,
+        kp_right=right_keypoints,
         matches=matches,
         left_pts=left_pts,
         right_pts=right_pts,
@@ -113,7 +113,7 @@ def create_stereo_point_cloud(
     3. Triangulate the remaining matches.
     4. Optionally reject triangulated points with non-positive depth or beyond max_depth.
     """
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
 
     data = load_frame_data(
         frame_idx,
@@ -124,7 +124,7 @@ def create_stereo_point_cloud(
     left_inliers, right_inliers = get_inlier_points(data, threshold)
 
     if use_custom_triangulation:
-        points_3d = custom_triangulation(P1, P2, left_inliers, right_inliers)
+        points_3d = triangulate_dlt(P1, P2, left_inliers, right_inliers)
     else:
         points_3d = triangulate_opencv(P1, P2, left_inliers, right_inliers)
 
