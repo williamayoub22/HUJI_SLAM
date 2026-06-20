@@ -1,40 +1,75 @@
-import numpy as np
-from typing import Tuple, Union
+"""Load stereo camera calibration from KITTI-style calibration files."""
+
 from pathlib import Path
 
+import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-BASE_DIR = PROJECT_ROOT / "dataset" / "sequences" / "00"
-DEFAULT_FILEPATH = BASE_DIR / "calib.txt"
+from slam.config import CALIBRATION_PATH
+
+DEFAULT_CALIBRATION_PATH = CALIBRATION_PATH
 
 
-def read_calib(filepath: Union[str, Path] = None) -> Tuple[np.ndarray, np.ndarray]:
+def _parse_projection_matrix(
+    line: str,
+    label: str,
+) -> np.ndarray:
+    """Parse one labeled 3x4 projection matrix from a calibration-file line.
+
+    Args:
+        line: Calibration-file line beginning with ``label``.
+        label: Expected matrix label, such as ``"P0:"``.
+
+    Returns:
+        Projection matrix with shape ``(3, 4)``.
+
+    Raises:
+        ValueError: If the line does not contain exactly 12 matrix values.
     """
-    Reads the 3x4 camera projection matrices P1 (left) and P2 (right) from calib.txt.
-    If no filepath is provided, it defaults to dataset/sequences/00/calib.txt.
+    values = line.removeprefix(label).split()
+
+    if len(values) != 12:
+        raise ValueError(f"Expected 12 values for calibration entry {label}, got {len(values)}.")
+
+    return np.asarray(values, dtype=float).reshape(3, 4)
+
+
+def read_stereo_calibration(
+    filepath: str | Path | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load left and right rectified projection matrices from a KITTI file.
+
+    Args:
+        filepath: Path to a KITTI-style ``calib.txt`` file. Uses the configured
+            sequence calibration file when omitted.
+
+    Returns:
+        Left and right camera projection matrices, each with shape ``(3, 4)``.
+
+    Raises:
+        FileNotFoundError: If the calibration file does not exist.
+        ValueError: If required stereo calibration entries are missing or invalid.
     """
-    if filepath is None:
-        filepath = DEFAULT_FILEPATH
-    else:
-        filepath = Path(filepath)
+    calibration_path = DEFAULT_CALIBRATION_PATH if filepath is None else Path(filepath)
 
-    if not filepath.exists():
-        raise FileNotFoundError(f"Calibration file not found at: {filepath}")
+    if not calibration_path.is_file():
+        raise FileNotFoundError(f"Calibration file not found: {calibration_path}")
 
-    with open(filepath, 'r') as f:
-        lines = f.readlines()
+    entries: dict[str, np.ndarray] = {}
 
-    P1 = None
-    P2 = None
+    for line in calibration_path.read_text(encoding="utf-8").splitlines():
+        stripped_line = line.strip()
 
-    for line in lines:
-        if line.startswith('P0:'):
-            P1 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
-        elif line.startswith('P1:'):
-            P2 = np.array([float(x) for x in line.strip().split()[1:]]).reshape(3, 4)
+        if not stripped_line:
+            continue
 
-    if P1 is None or P2 is None:
-        P1 = np.array([float(x) for x in lines[0].strip().split()]).reshape(3, 4)
-        P2 = np.array([float(x) for x in lines[1].strip().split()]).reshape(3, 4)
+        for label in ("P0:", "P1:"):
+            if stripped_line.startswith(label):
+                entries[label] = _parse_projection_matrix(
+                    stripped_line,
+                    label,
+                )
 
-    return P1, P2
+    if "P0:" not in entries or "P1:" not in entries:
+        raise ValueError(f"Expected P0: and P1: entries in calibration file {calibration_path}.")
+
+    return entries["P0:"], entries["P1:"]
