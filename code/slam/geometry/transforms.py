@@ -1,122 +1,135 @@
-from pathlib import Path
-from typing import Sequence
+"""Coordinate-transform utilities for camera extrinsics and trajectories."""
+
+from collections.abc import Sequence
 
 import numpy as np
 
 
-def to_homogeneous_transform(T: np.ndarray) -> np.ndarray:
-    """Converts either a 3x4 [R|t] matrix or a 4x4 matrix into a 4x4 transform."""
-    if T.shape == (4, 4):
-        return T
+def to_homogeneous_transform(transform: np.ndarray) -> np.ndarray:
+    """Convert a ``(3, 4)`` or ``(4, 4)`` transform to homogeneous form.
 
-    if T.shape == (3, 4):
-        T_hom = np.eye(4)
-        T_hom[:3, :] = T
-        return T_hom
+    Args:
+        transform: Rotation-translation matrix with shape ``(3, 4)`` or an
+            already homogeneous transform with shape ``(4, 4)``.
 
-    raise ValueError(f"Unexpected transformation shape: {T.shape}")
+    Returns:
+        Homogeneous transform with shape ``(4, 4)``.
+
+    Raises:
+        ValueError: If ``transform`` has an unsupported shape.
+    """
+    transform = np.asarray(transform, dtype=float)
+
+    if transform.shape == (4, 4):
+        return transform
+
+    if transform.shape == (3, 4):
+        homogeneous_transform = np.eye(4)
+        homogeneous_transform[:3, :] = transform
+        return homogeneous_transform
+
+    raise ValueError(f"Expected a transform with shape (3, 4) or (4, 4), got {transform.shape}.")
 
 
-def compose_global_camera_matrices(
+def compose_frame0_to_camera_extrinsics(
     relative_transforms: Sequence[np.ndarray],
 ) -> np.ndarray:
+    """Compose consecutive camera transforms into frame-0-to-camera extrinsics.
+
+    Each relative transform ``relative_transforms[i]`` maps coordinates from
+    camera ``i`` to camera ``i + 1``. The returned transform at index ``i``
+    maps coordinates from frame 0 to camera ``i``.
+
+    Args:
+        relative_transforms: Consecutive transforms ``T_i_to_i_plus_1``.
+
+    Returns:
+        Homogeneous extrinsics with shape ``(N + 1, 4, 4)``, where element zero
+        is the identity transform.
     """
-    Composes consecutive PnP relative transforms into global camera matrices.
+    frame0_to_camera: list[np.ndarray] = [np.eye(4)]
+    transform_frame0_to_current = np.eye(4)
 
-    Parameters
-    ----------
-    relative_transforms:
-        relative_transforms[i] is assumed to be T_{i -> i+1}, i.e.
-        it maps points from camera i coordinates to camera i+1 coordinates.
+    for transform_current_to_next in relative_transforms:
+        transform_current_to_next = to_homogeneous_transform(transform_current_to_next)
 
-    Returns
-    -------
-    global_camera_matrices:
-        Array of shape (N, 4, 4), where N = len(relative_transforms) + 1.
-        global_camera_matrices[i] is T_{0 -> i}, mapping points from
-        frame-0 coordinates to frame-i coordinates.
+        transform_frame0_to_current = transform_current_to_next @ transform_frame0_to_current
+        frame0_to_camera.append(transform_frame0_to_current.copy())
 
-    Notes
-    -----
-    The first frame is used as the global coordinate system, therefore
-    T_{0 -> 0} is the identity matrix.
-    """
-    global_matrices = [np.eye(4)]
-
-    T_0_to_current = np.eye(4)
-
-    for T_current_to_next in relative_transforms:
-        T_current_to_next = to_homogeneous_transform(T_current_to_next)
-        T_0_to_current = T_current_to_next @ T_0_to_current
-        global_matrices.append(T_0_to_current.copy())
-
-    return np.asarray(global_matrices)
+    return np.asarray(frame0_to_camera)
 
 
-def camera_center_from_extrinsic(T_0_to_i: np.ndarray) -> np.ndarray:
-    """
-    Computes the camera center of frame i in the frame-0/global coordinate system.
-    If the global extrinsic is:
-        x_i = R x_0 + t
-
-    then the camera center C_i is the point satisfying x_i = 0:
-        C_i = -R^T t
-    """
-    T_0_to_i = to_homogeneous_transform(T_0_to_i)
-    R = T_0_to_i[:3, :3]
-    t = T_0_to_i[:3, 3]
-    return -R.T @ t
-
-
-def camera_centers_from_extrinsics(global_camera_matrices: np.ndarray) -> np.ndarray:
-    """
-    Computes all camera centers in the frame-0/global coordinate system.
-    """
-    return np.asarray([
-        camera_center_from_extrinsic(T)
-        for T in global_camera_matrices
-    ])
-
-
-def save_global_camera_matrices(
-    relative_transforms: Sequence[np.ndarray],
-    output_dir: str | Path,
+def camera_center_from_world_to_camera_extrinsic(
+    world_to_camera: np.ndarray,
 ) -> np.ndarray:
+    """Return the camera center in world coordinates from a world-to-camera map.
+
+    The extrinsic follows:
+
+    ``x_camera = R @ x_world + t``.
+
+    Therefore, the camera center in world coordinates is ``-R.T @ t``.
+
+    Args:
+        world_to_camera: World-to-camera transform with shape ``(3, 4)`` or
+            ``(4, 4)``.
+
+    Returns:
+        Camera center with shape ``(3,)`` in world coordinates.
     """
-    Composes and saves global PnP camera matrices.
+    world_to_camera = to_homogeneous_transform(world_to_camera)
 
-    Saves:
-        global_camera_matrices.npy
-        camera_centers.npy
+    rotation_world_to_camera = world_to_camera[:3, :3]
+    translation_world_to_camera = world_to_camera[:3, 3]
 
-    Returns
-    -------
-    global_camera_matrices:
-        The saved array, with shape (N, 4, 4).
-    """
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    global_camera_matrices = compose_global_camera_matrices(relative_transforms)
-    camera_centers = camera_centers_from_extrinsics(global_camera_matrices)
-    np.save(output_dir / "global_camera_matrices.npy", global_camera_matrices)
-    np.save(output_dir / "camera_centers.npy", camera_centers)
-    return global_camera_matrices
+    return -rotation_world_to_camera.T @ translation_world_to_camera
 
 
-def load_global_camera_matrices(path: str | Path) -> np.ndarray:
-    """
-    Loads global camera matrices saved by save_global_camera_matrices().
-    """
-    return np.load(path)
-
-def relative_extrinsic(
-    T_global_to_ref: np.ndarray,
-    T_global_to_frame: np.ndarray,
+def camera_centers_from_world_to_camera_extrinsics(
+    world_to_camera_extrinsics: np.ndarray,
 ) -> np.ndarray:
-    """
-    Converts a global extrinsic T_{0 -> i} to a local-window extrinsic T_{s -> i}.
+    """Return camera centers in world coordinates for multiple extrinsics.
 
-    Both input matrices are assumed to map from the global/frame-0 coordinate
-    system to the corresponding camera coordinate system.
+    Args:
+        world_to_camera_extrinsics: Transform array with shape ``(N, 3, 4)``
+            or ``(N, 4, 4)``.
+
+    Returns:
+        Camera centers with shape ``(N, 3)``.
     """
-    return T_global_to_frame @ np.linalg.inv(T_global_to_ref)
+    return np.asarray(
+        [
+            camera_center_from_world_to_camera_extrinsic(extrinsic)
+            for extrinsic in world_to_camera_extrinsics
+        ],
+        dtype=float,
+    )
+
+
+def relative_world_to_camera_extrinsic(
+    world_to_reference: np.ndarray,
+    world_to_frame: np.ndarray,
+) -> np.ndarray:
+    """Express a frame's world-to-camera extrinsic in reference-camera coordinates.
+
+    Given two transforms:
+
+    ``x_reference = T_world_to_reference @ x_world``
+
+    ``x_frame = T_world_to_frame @ x_world``
+
+    this returns:
+
+    ``x_frame = T_reference_to_frame @ x_reference``.
+
+    Args:
+        world_to_reference: World-to-reference-camera extrinsic.
+        world_to_frame: World-to-frame-camera extrinsic.
+
+    Returns:
+        Reference-camera-to-frame-camera transform with shape ``(4, 4)``.
+    """
+    world_to_reference = to_homogeneous_transform(world_to_reference)
+    world_to_frame = to_homogeneous_transform(world_to_frame)
+
+    return world_to_frame @ np.linalg.inv(world_to_reference)
