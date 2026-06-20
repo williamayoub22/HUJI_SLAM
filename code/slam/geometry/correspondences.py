@@ -1,48 +1,120 @@
+"""Build four-view stereo-temporal correspondences from tracked image points."""
+
+from dataclasses import dataclass
+
 import numpy as np
 
 from ..pipeline.stereo_pipeline import StereoPointCloud
 
 
+@dataclass(frozen=True)
+class FourViewCorrespondences:
+    """Matched observations of landmarks across two consecutive stereo pairs.
+
+    Attributes:
+        points_3d: 3D points triangulated from the first stereo pair, shape
+            ``(N, 3)``.
+        left0: Pixel coordinates in the first left image, shape ``(N, 2)``.
+        right0: Pixel coordinates in the first right image, shape ``(N, 2)``.
+        left1: Pixel coordinates in the second left image, shape ``(N, 2)``.
+        right1: Pixel coordinates in the second right image, shape ``(N, 2)``.
+    """
+
+    points_3d: np.ndarray
+    left0: np.ndarray
+    right0: np.ndarray
+    left1: np.ndarray
+    right1: np.ndarray
+
+
 def find_common_points(
-    pc0: StereoPointCloud,
-    pc1: StereoPointCloud,
-    l0_pts: np.ndarray,
-    l1_pts: np.ndarray,
+    point_cloud0: StereoPointCloud,
+    point_cloud1: StereoPointCloud,
+    temporal_left0: np.ndarray,
+    temporal_left1: np.ndarray,
     tolerance: float = 1e-3,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> FourViewCorrespondences:
+    """Find points observed in two consecutive stereo pairs.
+
+    Each temporal correspondence links a left-image point in frame 0 to one in
+    frame 1. The function associates both points with their corresponding stereo
+    inliers, producing observations in left0, right0, left1, and right1.
+
+    Args:
+        point_cloud0: Stereo triangulation results for frame 0.
+        point_cloud1: Stereo triangulation results for frame 1.
+        temporal_left0: Matched left-image points in frame 0, shape ``(N, 2)``.
+        temporal_left1: Corresponding left-image points in frame 1, shape
+            ``(N, 2)``.
+        tolerance: Maximum Euclidean pixel distance used to associate a temporal
+            point with a stereo inlier.
+
+    Returns:
+        Four-view correspondences and 3D points from the first stereo pair.
+
+    Raises:
+        ValueError: If temporal point arrays are misaligned or tolerance is
+            negative.
     """
-    Finds points observed in all four images: left_0, right_0, left_1, right_1.
+    if temporal_left0.shape != temporal_left1.shape:
+        raise ValueError(
+            "Temporal point arrays must have identical shapes, got "
+            f"{temporal_left0.shape} and {temporal_left1.shape}."
+        )
 
-    pc0 gives the 3D point from stereo pair 0, together with its left_0/right_0 pixels.
-    The temporal matches give left_0 <-> left_1.
-    pc1 verifies that the left_1 point also has a stereo match to right_1.
-    """
-    pts_3d = []
-    pts_l0 = []
-    pts_r0 = []
-    pts_l1 = []
-    pts_r1 = []
+    if temporal_left0.ndim != 2 or temporal_left0.shape[1] != 2:
+        raise ValueError(
+            f"Temporal point arrays must have shape (N, 2), got {temporal_left0.shape}."
+        )
 
-    for temporal_idx, l0_pt in enumerate(l0_pts):
-        l1_pt = l1_pts[temporal_idx]
+    if tolerance < 0:
+        raise ValueError("tolerance must be non-negative.")
 
-        dist0 = np.linalg.norm(pc0.left_inliers - l0_pt, axis=1)
-        idx0 = int(np.argmin(dist0))
+    points_3d: list[np.ndarray] = []
+    left0_points: list[np.ndarray] = []
+    right0_points: list[np.ndarray] = []
+    left1_points: list[np.ndarray] = []
+    right1_points: list[np.ndarray] = []
 
-        dist1 = np.linalg.norm(pc1.left_inliers - l1_pt, axis=1)
-        idx1 = int(np.argmin(dist1))
+    for left0_point, left1_point in zip(
+        temporal_left0,
+        temporal_left1,
+        strict=True,
+    ):
+        distances0 = np.linalg.norm(
+            point_cloud0.left_inliers - left0_point,
+            axis=1,
+        )
+        index0 = int(np.argmin(distances0))
 
-        if dist0[idx0] <= tolerance and dist1[idx1] <= tolerance:
-            pts_3d.append(pc0.points_3d[idx0])
-            pts_l0.append(pc0.left_inliers[idx0])
-            pts_r0.append(pc0.right_inliers[idx0])
-            pts_l1.append(pc1.left_inliers[idx1])
-            pts_r1.append(pc1.right_inliers[idx1])
+        distances1 = np.linalg.norm(
+            point_cloud1.left_inliers - left1_point,
+            axis=1,
+        )
+        index1 = int(np.argmin(distances1))
 
-    return (
-        np.asarray(pts_3d, dtype=np.float64),
-        np.asarray(pts_l1, dtype=np.float64),
-        np.asarray(pts_l0, dtype=np.float64),
-        np.asarray(pts_r0, dtype=np.float64),
-        np.asarray(pts_r1, dtype=np.float64),
+        if distances0[index0] > tolerance or distances1[index1] > tolerance:
+            continue
+
+        points_3d.append(point_cloud0.points_3d[index0])
+        left0_points.append(point_cloud0.left_inliers[index0])
+        right0_points.append(point_cloud0.right_inliers[index0])
+        left1_points.append(point_cloud1.left_inliers[index1])
+        right1_points.append(point_cloud1.right_inliers[index1])
+
+    if not points_3d:
+        return FourViewCorrespondences(
+            points_3d=np.empty((0, 3), dtype=np.float64),
+            left0=np.empty((0, 2), dtype=np.float64),
+            right0=np.empty((0, 2), dtype=np.float64),
+            left1=np.empty((0, 2), dtype=np.float64),
+            right1=np.empty((0, 2), dtype=np.float64),
+        )
+
+    return FourViewCorrespondences(
+        points_3d=np.asarray(points_3d, dtype=np.float64),
+        left0=np.asarray(left0_points, dtype=np.float64),
+        right0=np.asarray(right0_points, dtype=np.float64),
+        left1=np.asarray(left1_points, dtype=np.float64),
+        right1=np.asarray(right1_points, dtype=np.float64),
     )
