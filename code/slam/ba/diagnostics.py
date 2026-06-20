@@ -1,18 +1,37 @@
-import gtsam
-import numpy as np
+"""Diagnostics for inspecting bundle-adjustment projection factors."""
 
-from slam.ba.results import ProjectionFactorMetadata
-from slam.ba.results import ProjectionEvaluation, LargestFactorDiagnostic, BundleAdjustmentResult
-from slam.tracking_database import TrackingDB
-from slam.ba.gtsam_utils import stereo_point_from_triplet, stereo_image_projection_distances
+import gtsam
 from gtsam.symbol_shorthand import C, Q
+
+from slam.ba.gtsam_utils import (
+    stereo_image_projection_distances,
+    stereo_point_from_triplet,
+)
+from slam.ba.results import (
+    BundleAdjustmentResult,
+    LargestFactorDiagnostic,
+    ProjectionEvaluation,
+    ProjectionFactorMetadata,
+)
+from slam.tracking_database import TrackingDB
+
 
 def factor_error(
     graph: gtsam.NonlinearFactorGraph,
     values: gtsam.Values,
     factor_index: int,
 ) -> float:
-    return graph.at(factor_index).error(values)
+    """Evaluate one graph factor at the supplied variable values.
+
+    Args:
+        graph: Factor graph containing the factor.
+        values: Variable assignment used for factor evaluation.
+        factor_index: Index of the factor in ``graph``.
+
+    Returns:
+        GTSAM error of the selected factor.
+    """
+    return float(graph.at(factor_index).error(values))
 
 
 def find_largest_initial_projection_factor(
@@ -20,9 +39,22 @@ def find_largest_initial_projection_factor(
     initial: gtsam.Values,
     projection_factors: list[ProjectionFactorMetadata],
 ) -> ProjectionFactorMetadata:
+    """Return metadata for the projection factor with the largest initial error.
+
+    Args:
+        graph: Bundle-adjustment factor graph.
+        initial: Initial pose and landmark estimates.
+        projection_factors: Metadata for projection factors in ``graph``.
+
+    Returns:
+        Metadata of the projection factor with the largest initial error.
+
+    Raises:
+        ValueError: If no projection factors are provided.
     """
-    Returns the projection factor with largest initial error.
-    """
+    if not projection_factors:
+        raise ValueError("No projection factors were provided.")
+
     return max(
         projection_factors,
         key=lambda meta: factor_error(graph, initial, meta.factor_index),
@@ -35,12 +67,22 @@ def evaluate_projection_factor(
     landmark: gtsam.Point3,
     measurement: gtsam.StereoPoint2,
     values: gtsam.Values,
-    K: gtsam.Cal3_S2Stereo,
+    calibration: gtsam.Cal3_S2Stereo,
 ) -> ProjectionEvaluation:
+    """Evaluate a stereo factor and its left/right reprojection distances.
+
+    Args:
+        factor: Stereo factor whose GTSAM error is evaluated.
+        pose: Camera pose used to project the landmark.
+        landmark: Landmark position in global coordinates.
+        measurement: Observed stereo measurement.
+        values: Variable assignment used for factor evaluation.
+        calibration: Stereo camera calibration.
+
+    Returns:
+        Factor error, projected measurement, and left/right pixel distances.
     """
-    Evaluate one existing stereo factor using a particular pose/landmark state.
-    """
-    camera = gtsam.StereoCamera(pose, K)
+    camera = gtsam.StereoCamera(pose, calibration)
     projection = camera.project(landmark)
 
     left_distance, right_distance = stereo_image_projection_distances(
@@ -58,63 +100,63 @@ def evaluate_projection_factor(
 
 def analyze_largest_initial_projection_factor(
     db: TrackingDB,
-    K: gtsam.Cal3_S2Stereo,
+    calibration: gtsam.Cal3_S2Stereo,
     result: BundleAdjustmentResult,
 ) -> LargestFactorDiagnostic:
-    """
-    Find the stereo projection factor with the largest initial error, then
-    compare its projection before and after bundle adjustment.
+    """Compare the worst initial projection factor before and after optimization.
+
+    The factor is selected using the initial bundle-adjustment estimate, so the
+    result helps identify the measurement or geometry causing the largest
+    initial reprojection inconsistency.
+
+    Args:
+        db: Tracking database containing stereo observations.
+        calibration: Stereo camera calibration.
+        result: Bundle-adjustment graph, values, and factor metadata.
+
+    Returns:
+        Before-and-after diagnostic data for the worst initial projection factor.
+
+    Raises:
+        RuntimeError: If the result contains no projection factors.
     """
     if not result.projection_factor_metadata:
         raise RuntimeError("No stereo projection factors found.")
 
-    initial_errors = []
-
-    for metadata in result.projection_factor_metadata:
-        factor = result.graph.at(metadata.factor_index)
-        initial_errors.append(float(factor.error(result.initial)))
-
-    largest_metadata_index = int(np.argmax(initial_errors))
-    metadata = result.projection_factor_metadata[largest_metadata_index]
+    metadata = find_largest_initial_projection_factor(
+        graph=result.graph,
+        initial=result.initial,
+        projection_factors=result.projection_factor_metadata,
+    )
 
     factor = result.graph.at(metadata.factor_index)
-
-    frame_id = metadata.frame_id
-    track_id = metadata.track_id
-
     measurement = stereo_point_from_triplet(
-        db.link_triplet(frame_id, track_id)
+        db.link_triplet(metadata.frame_id, metadata.track_id)
     )
 
-    initial_pose = result.initial.atPose3(C(frame_id))
-    initial_landmark = result.initial.atPoint3(Q(track_id))
-
-    optimized_pose = result.optimized.atPose3(C(frame_id))
-    optimized_landmark = result.optimized.atPoint3(Q(track_id))
-
-    initial_eval = evaluate_projection_factor(
+    initial_evaluation = evaluate_projection_factor(
         factor=factor,
-        pose=initial_pose,
-        landmark=initial_landmark,
+        pose=result.initial.atPose3(C(metadata.frame_id)),
+        landmark=result.initial.atPoint3(Q(metadata.track_id)),
         measurement=measurement,
         values=result.initial,
-        K=K,
+        calibration=calibration,
     )
 
-    optimized_eval = evaluate_projection_factor(
+    optimized_evaluation = evaluate_projection_factor(
         factor=factor,
-        pose=optimized_pose,
-        landmark=optimized_landmark,
+        pose=result.optimized.atPose3(C(metadata.frame_id)),
+        landmark=result.optimized.atPoint3(Q(metadata.track_id)),
         measurement=measurement,
         values=result.optimized,
-        K=K,
+        calibration=calibration,
     )
 
     return LargestFactorDiagnostic(
         factor_index=metadata.factor_index,
-        frame_id=frame_id,
-        track_id=track_id,
+        frame_id=metadata.frame_id,
+        track_id=metadata.track_id,
         measurement=measurement,
-        initial=initial_eval,
-        optimized=optimized_eval,
+        initial=initial_evaluation,
+        optimized=optimized_evaluation,
     )
