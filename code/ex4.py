@@ -1,5 +1,3 @@
-
-
 from pathlib import Path
 
 import cv2
@@ -7,15 +5,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from slam.pipeline.database_pipeline import build_tracking_database
-from slam.tracking_database import TrackingDB
 from slam.analysis.tracking_stats import compute_tracking_statistics, get_track_lengths
-from slam.io.calibration import read_calib
+from slam.config import PROJECT_DIR
+from slam.geometry.projection import project_points
+from slam.geometry.triangulation import triangulate_opencv
+from slam.io.calibration import read_stereo_calibration
 from slam.io.image_loader import read_images
 from slam.io.poses import read_ground_truth_poses
-from slam.geometry.triangulation import triangulate_opencv
-from slam.geometry.projection import project_points
-from slam.config import PROJECT_DIR
+from slam.pipeline.database_pipeline import build_tracking_database
+from slam.tracking_database import TrackingDB
 
 SECTION_7_MIN_TRACKS_LENGTH = 10
 
@@ -25,7 +23,7 @@ SECTION_7_MIN_TRACKS_LENGTH = 10
 
 # Number of frames to process.  Set to None for the full sequence.
 NUM_FRAMES = None
-REBUILD_DB = False
+REBUILD_DB = True
 
 SEQUENCE_DIR = PROJECT_DIR / "dataset" / "sequences" / "00"
 POSES_PATH = PROJECT_DIR / "dataset" / "poses" / "00.txt"
@@ -36,6 +34,7 @@ DB_PATH = OUTPUT_DIR / "tracking_db"
 # ############################################################################
 #                          SECTION 4.1 — Database
 # ############################################################################
+
 
 def build_or_load_database():
     """
@@ -76,8 +75,7 @@ def build_or_load_database():
             inlier_percentages = np.load(str(inlier_npy)).tolist()
         else:
             inlier_percentages = []
-        print(f"[4.1] Database loaded — {db.frame_num()} frames, "
-              f"{db.track_num()} tracks")
+        print(f"[4.1] Database loaded — {db.frame_num()} frames, {db.track_num()} tracks")
 
     return db, inlier_percentages
 
@@ -129,8 +127,7 @@ def display_track_length_6(db: TrackingDB):
         return
 
     frame_ids = db.frames(track_id)
-    print(f"[4.3] Selected track #{track_id} — appears in {len(frame_ids)} frames: "
-          f"{frame_ids}")
+    print(f"[4.3] Selected track #{track_id} — appears in {len(frame_ids)} frames: {frame_ids}")
 
     n = len(frame_ids)
     fig, axes = plt.subplots(n, 2, figsize=(12, 2.5 * n))
@@ -158,8 +155,9 @@ def display_track_length_6(db: TrackingDB):
         # Mark the feature on the crop
         cx = int(xl) - x_min
         cy = int(y) - y_min
-        cv2.drawMarker(crop, (cx, cy), (0, 0, 255),
-                       markerType=cv2.LINE_AA, markerSize=3, thickness=1)
+        cv2.drawMarker(
+            crop, (cx, cy), (0, 0, 255), markerType=cv2.LINE_AA, markerSize=3, thickness=1
+        )
 
         # Mark the feature on the full image
         img_marked = img_colour.copy()
@@ -185,6 +183,7 @@ def display_track_length_6(db: TrackingDB):
 # ############################################################################
 #  SECTION 4.4 — Connectivity Graph
 # ############################################################################
+
 
 def plot_connectivity(db: TrackingDB):
     """
@@ -224,6 +223,7 @@ def plot_connectivity(db: TrackingDB):
 #  SECTION 4.5 — Percentage of Inliers per Frame
 # ############################################################################
 
+
 def plot_inlier_percentages(inlier_percentages):
     """
     Section 4.5: Plot percentage of PnP inliers per frame transition.
@@ -233,8 +233,9 @@ def plot_inlier_percentages(inlier_percentages):
     print("=" * 60)
 
     if not inlier_percentages:
-        print("[4.5] WARNING: No inlier data available (database was loaded, "
-              "not rebuilt).  Skipping.")
+        print(
+            "[4.5] WARNING: No inlier data available (database was loaded, not rebuilt).  Skipping."
+        )
         return
 
     frames = list(range(1, len(inlier_percentages) + 1))
@@ -255,6 +256,7 @@ def plot_inlier_percentages(inlier_percentages):
 #  SECTION 4.6 — Track-Length Histogram
 # ############################################################################
 
+
 def plot_track_length_histogram(track_lengths):
     """
     Section 4.6: Histogram of track lengths (log scale y-axis).
@@ -271,8 +273,7 @@ def plot_track_length_histogram(track_lengths):
     max_len = int(np.max(track_lengths))
 
     plt.figure(figsize=(12, 4))
-    plt.hist(track_lengths, bins=range(2, max_len + 2), log=True,
-             edgecolor="black", linewidth=0.3)
+    plt.hist(track_lengths, bins=range(2, max_len + 2), log=True, edgecolor="black", linewidth=0.3)
     plt.xlabel("Track length")
     plt.ylabel("Track #")
     plt.title("Track length histogram")
@@ -286,6 +287,7 @@ def plot_track_length_histogram(track_lengths):
 # ############################################################################
 #  SECTION 4.7 — Reprojection Error
 # ############################################################################
+
 
 def plot_reprojection_error(db: TrackingDB):
     """
@@ -305,13 +307,15 @@ def plot_reprojection_error(db: TrackingDB):
     idx = np.random.randint(0, len(tracks_10))
     track_id = tracks_10[idx]
     frame_ids = db.frames(track_id)
-    print(f"[4.7] Selected track #{track_id} — length {len(frame_ids)}, "
-          f"frames {frame_ids[0]}–{frame_ids[-1]}")
+    print(
+        f"[4.7] Selected track #{track_id} — length {len(frame_ids)}, "
+        f"frames {frame_ids[0]}–{frame_ids[-1]}"
+    )
 
     # Read GT poses and calibration
     print("[4.7] Loading ground-truth poses …")
     poses = read_ground_truth_poses(POSES_PATH)
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
 
     def pose_to_4x4(pose_3x4):
         """Expand a KITTI 3×4 pose to a 4×4 homogeneous transform."""
@@ -324,7 +328,8 @@ def plot_reprojection_error(db: TrackingDB):
     T_last = pose_to_4x4(poses[last_fid])
     xl, xr, y = db.link_triplet(last_fid, track_id)
     point_3d = triangulate_opencv(
-        P1 @ T_last, P2 @ T_last,
+        P1 @ T_last,
+        P2 @ T_last,
         np.array([[xl, y]]),
         np.array([[xr, y]]),
     )  # shape (1, 3)

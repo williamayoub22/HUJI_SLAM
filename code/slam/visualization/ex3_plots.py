@@ -7,6 +7,7 @@ from ..pipeline.temporal_pipeline import TemporalMatchData
 
 NUM_TEMPORAL_MATCHES_TO_DRAW = 200
 
+
 def _to_rgb(image: np.ndarray) -> np.ndarray:
     """Converts a grayscale/BGR image to RGB for matplotlib."""
     if image.ndim == 2:
@@ -37,9 +38,9 @@ def plot_four_image_matches(
 
     canvas = np.zeros((2 * h, 2 * w, 3), dtype=left0_vis.dtype)
     canvas[:h, :w] = left0_vis
-    canvas[:h, w:2 * w] = right0_vis
-    canvas[h:2 * h, :w] = left1_vis
-    canvas[h:2 * h, w:2 * w] = right1_vis
+    canvas[:h, w : 2 * w] = right0_vis
+    canvas[h : 2 * h, :w] = left1_vis
+    canvas[h : 2 * h, w : 2 * w] = right1_vis
 
     plt.figure(figsize=(16, 10))
     plt.imshow(canvas)
@@ -111,6 +112,7 @@ def plot_four_image_matches(
 
     plt.tight_layout()
     plt.show()
+
 
 def plot_task_3_3(T, P1, P2):
     """Plots the relative positions of the four camera centers from above."""
@@ -244,6 +246,7 @@ def plot_task_3_4(
     plt.tight_layout()
     plt.show()
 
+
 def plot_task_3_5_matches(
     left0_img: np.ndarray,
     left1_img: np.ndarray,
@@ -304,6 +307,7 @@ def plot_task_3_5_matches(
     plt.tight_layout()
     plt.show()
 
+
 def plot_task_3_5_point_clouds(
     point_cloud_0: StereoPointCloud,
     point_cloud_1: StereoPointCloud,
@@ -322,11 +326,7 @@ def plot_task_3_5_point_clouds(
         & (points0_transformed[:, 2] > 0)
         & (points0_transformed[:, 2] < max_depth)
     )
-    mask1 = (
-        np.isfinite(points1).all(axis=1)
-        & (points1[:, 2] > 0)
-        & (points1[:, 2] < max_depth)
-    )
+    mask1 = np.isfinite(points1).all(axis=1) & (points1[:, 2] > 0) & (points1[:, 2] < max_depth)
 
     points0_plot = points0_transformed[mask0]
     points1_plot = points1[mask1]
@@ -358,5 +358,3 @@ def plot_task_3_5_point_clouds(
     plt.legend()
     plt.tight_layout()
     plt.show()
-
-

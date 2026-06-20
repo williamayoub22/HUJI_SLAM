@@ -1,14 +1,18 @@
-import numpy as np
-import cv2
+"""Data structures and utilities for maintaining stereo feature tracks."""
+
 import pickle
-from typing import List, Tuple, Dict, Sequence, Optional
+from collections.abc import Sequence
 from timeit import default_timer as timer
+
+import cv2
+import numpy as np
 
 NO_ID = -1
 
 
-""" a class that holds a single keypoint data for both left and right images of a stereo frame """
 class Link:
+    """a class that holds a single keypoint data for both left and right images of a stereo frame"""
+
     x_left: float
     x_right: float
     y: float
@@ -25,17 +29,19 @@ class Link:
         return np.array([self.x_right, self.y])
 
     def __str__(self):
-        return f'Link (xl={self.x_left}, xr={self.x_right}, y={self.y})'
+        return f"Link (xl={self.x_left}, xr={self.x_right}, y={self.y})"
 
 
 """
 for internal use of TrackingDB.
 holds the internal data of a single match that is needed for the tracking process. """
+
+
 class MatchLocation:
     distance: float
     loc: int
     is_new_track: bool
-    MAX_DIST = float('Inf')
+    MAX_DIST = float("Inf")
 
     # distance - the quality of the match
     # loc - the index of the feature matched in the query descriptor array (the row of the feature)
@@ -48,7 +54,9 @@ class MatchLocation:
         self.is_new_track = is_new_track
 
     def valid(self):
-        return self.distance < self.MAX_DIST and self.loc is not None and self.is_new_track is not None
+        return (
+            self.distance < self.MAX_DIST and self.loc is not None and self.is_new_track is not None
+        )
 
     def __lt__(self, distance):
         return self.distance < distance
@@ -63,7 +71,7 @@ class MatchLocation:
         return self.distance >= distance
 
     def __str__(self):
-        return f'MatchLocation (dist={self.distance}, loc={self.loc}, is_new={self.is_new_track})'
+        return f"MatchLocation (dist={self.distance}, loc={self.loc}, is_new={self.is_new_track})"
 
 
 """
@@ -71,18 +79,22 @@ A database to accumulate the tracking information between all consecutive video 
 The stereo frames are added sequentially with their tracking information and arranged
 such that the data can be referenced using Ids for the frames and tracks.
 """
+
+
 class TrackingDB:
     last_frameId: int
     last_trackId: int
-    trackId_to_frames: Dict[int, List[int]]
-    linkId_to_link: Dict[Tuple[int, int], Link]
-    frameId_to_lfeature: Dict[int, np.ndarray]
-    frameId_to_trackIds_list: Dict[int, List[int]]
-    prev_frame_links: List[Link]
-    leftover_links: Dict[int, List[Link]]
+    trackId_to_frames: dict[int, list[int]]
+    linkId_to_link: dict[tuple[int, int], Link]
+    frameId_to_lfeature: dict[int, np.ndarray]
+    frameId_to_trackIds_list: dict[int, list[int]]
+    prev_frame_links: list[Link]
+    leftover_links: dict[int, list[Link]]
 
     def __init__(self):
-        self.last_frameId = -1  # assumptions: frameIds are consecutive from 0 (1st frame) to last_frameId
+        self.last_frameId = (
+            -1
+        )  # assumptions: frameIds are consecutive from 0 (1st frame) to last_frameId
         self.last_trackId = -1
         self.trackId_to_frames = {}  # map trackId --> frameId list   // all the frames the track appears on
         self.linkId_to_link = {}  # map (frameId, trackId) --> Link
@@ -97,11 +109,13 @@ class TrackingDB:
         self.leftover_links = {}
 
     """ a list of the frames on trackId """
-    def frames(self, trackId) -> List[int]:
+
+    def frames(self, trackId) -> list[int]:
         return self.trackId_to_frames.get(trackId, [])
 
     """ all links that are part of the trackId. returns a dict frameId --> Link """
-    def track(self, trackId) -> Dict[int, Link]:
+
+    def track(self, trackId) -> dict[int, Link]:
         fIds = self.frames(trackId)
         track_links = {}
         for fId in fIds:
@@ -109,50 +123,61 @@ class TrackingDB:
         return track_links
 
     """ the last frame of trackId """
+
     def last_frame_of_track(self, trackId) -> int:
         return self.frames(trackId)[-1]
 
     """ a list of the tracks on frameId """
-    def tracks(self, frameId) -> List[int]:
+
+    def tracks(self, frameId) -> list[int]:
         tracks = self.frameId_to_trackIds_list.get(frameId, None)
         if not tracks:
             return []
         return sorted([x for x in tracks if x != NO_ID])
 
     """ number of tracks issued """
+
     def track_num(self) -> int:
         return len(self.all_tracks())
 
     """ all valid trackIds """
-    def all_tracks(self) -> List[int]:
+
+    def all_tracks(self) -> list[int]:
         return list(self.trackId_to_frames.keys())
 
     """ total number of links in the DB """
+
     def link_num(self) -> int:
         return len(self.linkId_to_link)
 
     """ number of frames issued """
+
     def frame_num(self) -> int:
         return self.last_frameId + 1
 
     """ a range of all the frames """
+
     def all_frames(self) -> Sequence[int]:
         return range(self.frame_num())
 
     """ The feature array of (the left image of) frameId """
-    def features(self, frameId) -> Optional[np.ndarray]:
+
+    def features(self, frameId) -> np.ndarray | None:
         return self.frameId_to_lfeature.get(frameId, None)
 
     """ The feature array of (the left image of) the last added frame """
-    def last_features(self) -> Optional[np.ndarray]:
+
+    def last_features(self) -> np.ndarray | None:
         return self.frameId_to_lfeature.get(self.last_frameId, None)
 
     """ the link of trackId that sits on frameId """
-    def link(self, frameId, trackId) -> Optional[Link]:
+
+    def link(self, frameId, trackId) -> Link | None:
         return self.linkId_to_link.get((frameId, trackId), None)
 
     """ all links that are part of a track on frameId. returns a dict trackId --> Link """
-    def links(self, frameId) -> Dict[int, Link]:
+
+    def links(self, frameId) -> dict[int, Link]:
         frame_links = {}
         for key, link in self.linkId_to_link.items():
             if key[0] == frameId:
@@ -161,12 +186,14 @@ class TrackingDB:
 
     """ all the links of the last frame,
         not only the ones that are part of a track but every extracted feature """
-    def all_last_frame_links(self) -> List[Link]:
+
+    def all_last_frame_links(self) -> list[Link]:
         return self.prev_frame_links
 
     """ all the links of frameId,
         not only the ones that are part of a track but every extracted feature from the frame """
-    def all_frame_links(self, frameId) -> List[Link]:
+
+    def all_frame_links(self, frameId) -> list[Link]:
         feat_num = self.frameId_to_lfeature[frameId].shape[0]
         trackIds_list = self.frameId_to_trackIds_list[frameId]
         assert feat_num == len(trackIds_list)
@@ -186,11 +213,13 @@ class TrackingDB:
         return links_for_feat
 
     """ issue a new frame and return its frameId """
+
     def issue_frameId(self) -> int:
         self.last_frameId += 1
         return self.last_frameId
 
     """ issue a new track and return its trackId """
+
     def issue_trackId(self) -> int:
         self.last_trackId += 1
         return self.last_trackId
@@ -219,12 +248,15 @@ class TrackingDB:
              (inliers[i] indicates the validity of matches[i]), i.e. len(inliers) == len(matches)
              If omitted treats all the matches as inliers.
     """
+
     @staticmethod
-    def create_links(features: np.ndarray,
-                     kp_left: Tuple[cv2.KeyPoint],
-                     kp_right: Tuple[cv2.KeyPoint],
-                     matches: Tuple[cv2.DMatch],
-                     inliers: List[bool] = None) -> Tuple[np.ndarray, List[Link]]:
+    def create_links(
+        features: np.ndarray,
+        kp_left: tuple[cv2.KeyPoint],
+        kp_right: tuple[cv2.KeyPoint],
+        matches: tuple[cv2.DMatch],
+        inliers: list[bool] = None,
+    ) -> tuple[np.ndarray, list[Link]]:
         assert features.shape[0] == len(kp_left)
         is_knn = type(matches[0]) is tuple
         inliers = TrackingDB.__all_inliers(inliers, len(matches))
@@ -268,11 +300,14 @@ class TrackingDB:
              (inliers[i] indicates the validity of matches_to_previous_left[i]),
              i.e. len(inliers) == len(matches_to_previous_left). If omitted treats all the matches as inliers.
     """
-    def add_frame(self,
-                  links: List[Link],
-                  left_features: np.ndarray,
-                  matches_to_previous_left: Tuple[cv2.DMatch] = None,
-                  inliers: List[bool] = None) -> int:
+
+    def add_frame(
+        self,
+        links: list[Link],
+        left_features: np.ndarray,
+        matches_to_previous_left: tuple[cv2.DMatch] = None,
+        inliers: list[bool] = None,
+    ) -> int:
         feat_num = left_features.shape[0]
         assert feat_num == len(links)
 
@@ -285,9 +320,15 @@ class TrackingDB:
             assert matches_to_previous_left is None
             return cur_frameId
 
-        assert matches_to_previous_left is not None  # should have matches to prev frame (unless first frame)
+        assert (
+            matches_to_previous_left is not None
+        )  # should have matches to prev frame (unless first frame)
         inliers = self.__all_inliers(inliers, len(matches_to_previous_left))
-        assert self.frameId_to_lfeature[prev_frameId].shape[0] == len(matches_to_previous_left) == len(inliers)
+        assert (
+            self.frameId_to_lfeature[prev_frameId].shape[0]
+            == len(matches_to_previous_left)
+            == len(inliers)
+        )
 
         # get prev frame trackIds:
         prev_frame_tracksIds = self.frameId_to_trackIds_list.get(prev_frameId)
@@ -310,20 +351,30 @@ class TrackingDB:
                 assert prev_trackId == self.frameId_to_trackIds_list[cur_frameId][cur_feat_loc]
                 if prev_match.is_new_track:
                     prev_frame_tracksIds[prev_match.loc] = NO_ID  # reset to no track
-                    del self.linkId_to_link[(prev_frameId, prev_trackId)]  # remove link of wrong match
-                    removed_frameId = self.trackId_to_frames[prev_trackId].pop(0)  # remove 1st frame from track list
+                    del self.linkId_to_link[
+                        (prev_frameId, prev_trackId)
+                    ]  # remove link of wrong match
+                    removed_frameId = self.trackId_to_frames[prev_trackId].pop(
+                        0
+                    )  # remove 1st frame from track list
                     assert removed_frameId == prev_frameId
                 # regardless if new or not, remove link and track from current frame:
-                self.__remove_link_from_last_frame(prev_trackId, cur_feat_loc)  # remove 2nd link of wrong match
+                self.__remove_link_from_last_frame(
+                    prev_trackId, cur_feat_loc
+                )  # remove 2nd link of wrong match
 
             is_new_track = prev_frame_tracksIds[prev_feat_loc] == NO_ID  # 1st match
             prev_matches[cur_feat_loc] = MatchLocation(m.distance, prev_feat_loc, is_new_track)
             if is_new_track:
                 new_trackId = self.issue_trackId()
-                self.__new_link(prev_frameId, new_trackId, prev_feat_loc, self.prev_frame_links[prev_feat_loc])
+                self.__new_link(
+                    prev_frameId, new_trackId, prev_feat_loc, self.prev_frame_links[prev_feat_loc]
+                )
                 assert prev_frame_tracksIds[prev_feat_loc] == new_trackId
 
-            self.__new_link(cur_frameId, prev_frame_tracksIds[prev_feat_loc], cur_feat_loc, links[cur_feat_loc])
+            self.__new_link(
+                cur_frameId, prev_frame_tracksIds[prev_feat_loc], cur_feat_loc, links[cur_feat_loc]
+            )
 
         # store all links of features in previous frame that were not matched:
         self.leftover_links[prev_frameId] = []
@@ -335,18 +386,22 @@ class TrackingDB:
         return cur_frameId
 
     """ length of trackId, i.e. the number of frames in which it appears """
+
     def track_length(self, trackId: int) -> int:
         return len(self.frames(trackId))
 
     """ all valid trackIds with length at least min_length """
-    def tracks_with_min_length(self, min_length: int) -> List[int]:
-        return [trackId for trackId in self.all_tracks()
-                if self.track_length(trackId) >= min_length]
+
+    def tracks_with_min_length(self, min_length: int) -> list[int]:
+        return [
+            trackId for trackId in self.all_tracks() if self.track_length(trackId) >= min_length
+        ]
 
     """
     Returns the first track whose length is in [min_length, max_length],
     or None if no such track exists.
     """
+
     def first_track_with_length_range(self, min_length: int, max_length: int):
         for track_id in self.all_tracks():
             length = self.track_length(track_id)
@@ -355,77 +410,82 @@ class TrackingDB:
         return None
 
     """ the feature location triplet (x_left, x_right, y) of trackId on frameId """
-    def link_triplet(self, frameId: int, trackId: int) -> Tuple[float, float, float]:
+
+    def link_triplet(self, frameId: int, trackId: int) -> tuple[float, float, float]:
         link = self.link(frameId, trackId)
         if link is None:
             raise KeyError(f"Track {trackId} does not appear in frame {frameId}")
         return link.x_left, link.x_right, link.y
 
     """ save TrackingDB to base_filename+'.pkl' file. """
+
     def serialize(self, base_filename):
         data = {
-            'last_frameId': self.last_frameId,
-            'last_trackId': self.last_trackId,
-            'trackId_to_frames': self.trackId_to_frames,
-            'linkId_to_link': self.linkId_to_link,
-            'frameId_to_lfeature': self.frameId_to_lfeature,
-            'frameId_to_trackIds_list': self.frameId_to_trackIds_list,
-            'prev_frame_links': self.prev_frame_links,
-            'leftover_links': self.leftover_links
+            "last_frameId": self.last_frameId,
+            "last_trackId": self.last_trackId,
+            "trackId_to_frames": self.trackId_to_frames,
+            "linkId_to_link": self.linkId_to_link,
+            "frameId_to_lfeature": self.frameId_to_lfeature,
+            "frameId_to_trackIds_list": self.frameId_to_trackIds_list,
+            "prev_frame_links": self.prev_frame_links,
+            "leftover_links": self.leftover_links,
         }
-        filename = base_filename + '.pkl'
+        filename = base_filename + ".pkl"
         with open(filename, "wb") as file:
             pickle.dump(data, file)
-        print('TrackingDB serialized to', filename)
+        print("TrackingDB serialized to", filename)
 
     """ load TrackingDB to base_filename+'.pkl' file. """
+
     def load(self, base_filename):
-        filename = base_filename + '.pkl'
-        with open(filename, 'rb') as file:
+        filename = base_filename + ".pkl"
+        with open(filename, "rb") as file:
             data = pickle.load(file)
-            self.last_frameId = data['last_frameId']
-            self.last_trackId = data['last_trackId']
-            self.trackId_to_frames = data['trackId_to_frames']
-            self.linkId_to_link = data['linkId_to_link']
-            self.frameId_to_lfeature = data['frameId_to_lfeature']
-            self.frameId_to_trackIds_list = data['frameId_to_trackIds_list']
-            self.prev_frame_links = data['prev_frame_links']
-            self.leftover_links = data['leftover_links']
-        print('TrackingDB loaded from', filename)
+            self.last_frameId = data["last_frameId"]
+            self.last_trackId = data["last_trackId"]
+            self.trackId_to_frames = data["trackId_to_frames"]
+            self.linkId_to_link = data["linkId_to_link"]
+            self.frameId_to_lfeature = data["frameId_to_lfeature"]
+            self.frameId_to_trackIds_list = data["frameId_to_trackIds_list"]
+            self.prev_frame_links = data["prev_frame_links"]
+            self.leftover_links = data["leftover_links"]
+        print("TrackingDB loaded from", filename)
 
     """
     save the data of a single frame to base_filename+'_frameId.pkl' file.  (frameId in six digits with leading zeros)
     serializing the frame holds just the context of the frame without the data needed for continues tracking.
     loading the file will only retrieve the frame data and not update the TrackingDB that holds this frame.
     """
+
     def serialize_frame(self, base_filename: str, frameId: int):
         data = {
-            'frameId': frameId,
-            'frame_links': self.all_frame_links(frameId),
-            'lfeature': self.frameId_to_lfeature[frameId],
+            "frameId": frameId,
+            "frame_links": self.all_frame_links(frameId),
+            "lfeature": self.frameId_to_lfeature[frameId],
         }
-        filename = base_filename + '_{:06d}.pkl'.format(frameId)
+        filename = base_filename + f"_{frameId:06d}.pkl"
         with open(filename, "wb") as file:
             pickle.dump(data, file)
-        print('TrackingDB frame #', frameId, 'serialized to', filename)
+        print("TrackingDB frame #", frameId, "serialized to", filename)
 
     """
     load a single frame data from base_filename+'_frameId.pkl' file.  (frameId in six digits with leading zeros)
     serializing the frame holds just the context of the frame without the data needed for continues tracking.
     loading the file will only retrieve the frame data and not update the TrackingDB that holds this frame.
     """
+
     @staticmethod
-    def load_frame(base_filename: str, frameId: int) -> Tuple[np.ndarray, List[Link]]:
-        filename = base_filename + '_{:06d}.pkl'.format(frameId)
-        with open(filename, 'rb') as file:
+    def load_frame(base_filename: str, frameId: int) -> tuple[np.ndarray, list[Link]]:
+        filename = base_filename + f"_{frameId:06d}.pkl"
+        with open(filename, "rb") as file:
             data = pickle.load(file)
 
-            saved_frameId = data['frameId']
+            saved_frameId = data["frameId"]
             assert saved_frameId == frameId
 
-            frame_links = data['frame_links']
-            features = data['lfeature']
-            print('TrackingDB frame #', frameId, 'loaded from', filename)
+            frame_links = data["frame_links"]
+            features = data["lfeature"]
+            print("TrackingDB frame #", frameId, "loaded from", filename)
             return features, frame_links
 
     def __add_frameId_to_track(self, frameId, trackId):
@@ -435,7 +495,10 @@ class TrackingDB:
             self.trackId_to_frames[trackId] = [frameId]
 
     def __new_link(self, frameId, trackId, feature_loc, link):
-        assert frameId == self.last_frameId or self.frameId_to_trackIds_list[frameId][feature_loc] == NO_ID
+        assert (
+            frameId == self.last_frameId
+            or self.frameId_to_trackIds_list[frameId][feature_loc] == NO_ID
+        )
         self.frameId_to_trackIds_list[frameId][feature_loc] = trackId
         assert (frameId, trackId) not in self.linkId_to_link
         self.linkId_to_link[(frameId, trackId)] = link
@@ -451,7 +514,10 @@ class TrackingDB:
     def __remove_link_from_last_frame(self, trackId, feat_loc_on_trackId_list):
         del self.linkId_to_link[(self.last_frameId, trackId)]
         self.frameId_to_trackIds_list[self.last_frameId][feat_loc_on_trackId_list] = NO_ID
-        assert self.trackId_to_frames[trackId][-1] == self.last_frameId and 'last track frame is not the last frame'
+        assert (
+            self.trackId_to_frames[trackId][-1] == self.last_frameId
+            and "last track frame is not the last frame"
+        )
         self.__remove_last_frame_from_track_list(trackId)
 
     def __remove_last_frame_from_track_list(self, trackId):
@@ -471,7 +537,7 @@ class TrackingDB:
             link_count += frame_links_num
 
         assert link_count == n
-        print('Elapsed time: {0:.2f} secs.'.format(timer() - start))
+        print(f"Elapsed time: {timer() - start:.2f} secs.")
 
         start = timer()
         link_count = 0
@@ -481,12 +547,12 @@ class TrackingDB:
             assert track_len >= 2
             link_count += track_len
         assert link_count == n
-        print('Elapsed time: {0:.2f} secs.'.format(timer() - start))
+        print(f"Elapsed time: {timer() - start:.2f} secs.")
 
         start = timer()
         for (frameId, trackId), link in self.linkId_to_link.items():
             assert frameId in self.frames(trackId)
             assert trackId in self.tracks(frameId)
 
-        print('Elapsed time: {0:.2f} secs.'.format(timer() - start))
-        print('All Good')
+        print(f"Elapsed time: {timer() - start:.2f} secs.")
+        print("All Good")

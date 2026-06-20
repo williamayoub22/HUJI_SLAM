@@ -1,17 +1,17 @@
-from pathlib import Path
 import time
+from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
 
-from ..io.calibration import read_calib
+from ..features.detectors import FeatureType, extract_features
+from ..features.matching import get_matched_points, match_and_filter
 from ..geometry.correspondences import find_common_points
-from ..features.detectors import extract_features, FeatureType
-from ..io.image_loader import read_images
-from ..features.matching import match_and_filter, get_matched_points
 from ..geometry.ransac import ransac_pnp
-from ..pipeline.stereo_pipeline import create_stereo_point_cloud
 from ..geometry.transforms import to_homogeneous_transform
+from ..io.calibration import read_stereo_calibration
+from ..io.image_loader import read_images
+from ..pipeline.stereo_pipeline import create_stereo_point_cloud
 
 
 def track_sequence(
@@ -32,7 +32,7 @@ def track_sequence(
         relative_transforms: list of relative transforms between consecutive frames.
         elapsed_time: tracking runtime in seconds.
     """
-    P1, P2 = read_calib()
+    P1, P2 = read_stereo_calibration()
     K = P1[:, :3]
 
     total_frames = len(list((sequence_dir / "image_0").glob("*.png")))
@@ -91,22 +91,27 @@ def track_sequence(
             else:
                 pts_l0, pts_l1 = get_matched_points(kp_prev, kp_curr, matches)
 
-                pts_3d, pts_l1_c, pts_l0_c, pts_r0_c, pts_r1_c = find_common_points(
+                correspondences = find_common_points(
                     pc_prev,
                     pc_curr,
                     pts_l0,
                     pts_l1,
                 )
+                points_3d = correspondences.points_3d
+                left0 = correspondences.left0
+                right0 = correspondences.right0
+                left1 = correspondences.left1
+                right1 = correspondences.right1
 
-                if len(pts_3d) < 4:
+                if len(points_3d) < 4:
                     T_rel = np.eye(4)
                 else:
                     T_candidate, _ = ransac_pnp(
-                        pts_3d,
-                        pts_l1_c,
-                        pts_l0_c,
-                        pts_r0_c,
-                        pts_r1_c,
+                        points_3d,
+                        left1,
+                        left0,
+                        right0,
+                        right1,
                         K,
                         P1,
                         P2,

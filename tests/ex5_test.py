@@ -1,21 +1,20 @@
-import numpy as np
-import gtsam
 import sys
+
+import gtsam
+import numpy as np
+
 
 def flush_print(msg):
     print(msg)
     sys.stdout.flush()
 
+
 def test_gtsam_basics():
     flush_print("Testing GTSAM basics...")
-    
+
     # 1. Explicit elements
     flush_print("\n1. Testing Rot3 with explicit elements (R11, R12, etc.)...")
-    rot_explicit = gtsam.Rot3(
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0
-    )
+    rot_explicit = gtsam.Rot3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
     flush_print("   -> Success")
 
     # 2. Identity matrix
@@ -43,6 +42,7 @@ def test_gtsam_basics():
     R_contig = np.ascontiguousarray(R.T)
     rot_data = gtsam.Rot3(R_contig)
     flush_print("   -> Success")
+
 
 if __name__ == "__main__":
     test_gtsam_basics()
