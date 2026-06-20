@@ -304,7 +304,8 @@ def init():
     K = make_gtsam_stereo_calibration(P1, P2)
 
     gt_poses = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
-    gt_positions_all = gt_poses[:, :, 3]
+    from slam.visualization.trajectory import camera_centers_from_extrinsic
+    gt_positions_all = camera_centers_from_extrinsic(gt_poses)
 
     return K, db, global_camera_matrices, gt_positions_all
 

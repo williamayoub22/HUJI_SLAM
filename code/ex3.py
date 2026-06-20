@@ -27,7 +27,7 @@ FRAME_1_INDEX = 1
 COMMON_POINT_TOLERANCE = 1e-3
 SUPPORTER_THRESHOLD_PIXELS = 2.0
 PNP_NUM_POINTS = 4
-FEATURE_TYPE: FeatureType = "orb"
+FEATURE_TYPE: FeatureType = "akaze"
 SEQ_DIR = Path(__file__).resolve().parent.parent / "dataset" / "sequences" / "00"
 POSES_PATH = Path(__file__).resolve().parent.parent / "dataset" / "poses" / "00.txt"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "outputs" / "ex3"
@@ -48,7 +48,7 @@ def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
     point_cloud_0 = create_stereo_point_cloud(
         FRAME_0_INDEX,
         reject_negative_depth=True,
-        feature_type="orb",
+        feature_type="akaze",
         num_features=3000,
         use_ratio_test=True,
     )
@@ -56,7 +56,7 @@ def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
     point_cloud_1 = create_stereo_point_cloud(
         FRAME_1_INDEX,
         reject_negative_depth=True,
-        feature_type = "orb",
+        feature_type = "akaze",
         num_features = 3000,
         use_ratio_test=True
     )

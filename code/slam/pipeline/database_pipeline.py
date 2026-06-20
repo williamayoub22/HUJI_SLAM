@@ -289,7 +289,7 @@ def load_tracking_database(base_filename: str | Path) -> TrackingDB:
 def build_tracking_database(
     sequence_dir: Path,
     num_frames: int | None = None,
-    feature_type: FeatureType = "orb",
+    feature_type: FeatureType = "akaze",
     num_features: int = 3000,
     ratio_threshold: float = 0.75,
     deviation_threshold: float = DEVIATION_THRESHOLD,

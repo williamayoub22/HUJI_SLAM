@@ -17,7 +17,7 @@ from ..geometry.transforms import to_homogeneous_transform
 def track_sequence(
     sequence_dir: Path,
     num_frames: int | None = None,
-    feature_type: FeatureType = "orb",
+    feature_type: FeatureType = "akaze",
     num_features: int = 3000,
     use_ratio_test: bool = True,
     ratio_threshold: float = 0.75,

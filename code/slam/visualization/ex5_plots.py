@@ -256,6 +256,14 @@ def plot_keyframes_and_landmarks_top_down(
     axis.grid(True)
     axis.legend()
 
+    # Set axis limits based on keyframe positions so the trajectories are
+    # visible and not squashed by outlier landmarks
+    all_x = np.concatenate([estimated_positions[:, 0], gt_positions[:, 0]])
+    all_z = np.concatenate([estimated_positions[:, 2], gt_positions[:, 2]])
+    margin = 0.1 * max(all_x.ptp(), all_z.ptp(), 1.0)
+    axis.set_xlim(all_x.min() - margin, all_x.max() + margin)
+    axis.set_ylim(all_z.min() - margin, all_z.max() + margin)
+
     figure.tight_layout()
     figure.savefig(output_path, dpi=200)
     plt.close(figure)
