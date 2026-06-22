@@ -63,9 +63,15 @@ def _compute_stereo_inlier_mask(
     inliers = []
 
     for match in matches:
+        x_left = kp_left[match.queryIdx].pt[0]
         y_left = kp_left[match.queryIdx].pt[1]
+        x_right = kp_right[match.trainIdx].pt[0]
         y_right = kp_right[match.trainIdx].pt[1]
-        inliers.append(abs(y_left - y_right) <= deviation_threshold)
+        
+        valid_y = abs(y_left - y_right) <= deviation_threshold
+        valid_x = (x_left - x_right) > 0.5  # Positive disparity check
+
+        inliers.append(valid_y and valid_x)
 
     return inliers
 
@@ -295,7 +301,7 @@ def build_tracking_database(
     num_frames: int | None = None,
     feature_type: FeatureType = "akaze",
     num_features: int = 3000,
-    ratio_threshold: float = 0.75,
+    ratio_threshold: float = 0.6,
     deviation_threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[TrackingDB, list[float]]:
     """Build a TrackingDB over a sequence of stereo frames.

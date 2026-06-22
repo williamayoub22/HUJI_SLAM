@@ -20,7 +20,7 @@ def track_sequence(
     feature_type: FeatureType = "akaze",
     num_features: int = 3000,
     use_ratio_test: bool = True,
-    ratio_threshold: float = 0.75,
+    ratio_threshold: float = 0.6,
     deviation_threshold: float = 2.0,
     max_depth: float = 300.0,
 ) -> tuple[np.ndarray, list[np.ndarray], float]:
