@@ -39,10 +39,8 @@ def conditional_covariance(
     sigma_end_start = joint_covariance[6:, :6]
     sigma_end_end = joint_covariance[6:, 6:]
 
-    covariance = (
-        sigma_end_end
-        - sigma_end_start
-        @ np.linalg.solve(sigma_start_start, sigma_start_end)
+    covariance = sigma_end_end - sigma_end_start @ np.linalg.solve(
+        sigma_start_start, sigma_start_end
     )
 
     # Numerical cleanup: a covariance must be symmetric.
@@ -75,9 +73,7 @@ def extract_relative_pose_constraint(
     keys.append(start_key)
     keys.append(end_key)
 
-    joint_covariance = (
-        marginals.jointMarginalCovariance(keys).fullMatrix()
-    )
+    joint_covariance = marginals.jointMarginalCovariance(keys).fullMatrix()
 
     covariance = conditional_covariance(joint_covariance)
 
@@ -87,3 +83,46 @@ def extract_relative_pose_constraint(
         relative_pose=relative_pose,
         covariance=covariance,
     )
+
+
+import numpy as np
+from gtsam.symbol_shorthand import C
+
+
+def verify_relative_measurement(
+    bundle_solution,
+    constraint: RelativePoseConstraint,
+    tolerance: float = 1e-6,
+) -> None:
+    """
+    Verifies that the extracted relative pose reconstructs the optimized
+    final keyframe pose from the optimized initial keyframe pose.
+    """
+    optimized = bundle_solution.result.optimized
+
+    start_pose = optimized.atPose3(
+        C(bundle_solution.start_frame),
+    )
+    end_pose = optimized.atPose3(
+        C(bundle_solution.end_frame),
+    )
+
+    reconstructed_end_pose = start_pose.compose(
+        constraint.relative_pose,
+    )
+
+    if not reconstructed_end_pose.equals(
+        end_pose,
+        tolerance,
+    ):
+        raise AssertionError(
+            "Relative pose does not reconstruct the optimized end pose. "
+            "Check pose direction or compose order."
+        )
+
+    if not np.allclose(
+        constraint.covariance,
+        constraint.covariance.T,
+        atol=1e-8,
+    ):
+        raise AssertionError("Relative covariance is not symmetric.")
