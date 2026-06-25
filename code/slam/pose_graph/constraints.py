@@ -20,8 +20,7 @@ class RelativePoseConstraint:
 def conditional_covariance(
     joint_covariance: np.ndarray,
 ) -> np.ndarray:
-    """
-    Computes Cov(c_end | c_start) from the joint covariance of
+    """Computes Cov(c_end | c_start) from the joint covariance of
     [c_start, c_end].
 
     The input is a 12x12 matrix:
@@ -50,8 +49,7 @@ def conditional_covariance(
 def extract_relative_pose_constraint(
     solution: BundleWindowSolution,
 ) -> RelativePoseConstraint:
-    """
-    Extracts the relative pose and conditional covariance between the
+    """Extracts the relative pose and conditional covariance between the
     first and last keyframes of one optimized BA window.
     """
     result = solution.result
@@ -86,7 +84,6 @@ def extract_relative_pose_constraint(
 
 
 import numpy as np
-from gtsam.symbol_shorthand import C
 
 
 def verify_relative_measurement(
@@ -94,8 +91,7 @@ def verify_relative_measurement(
     constraint: RelativePoseConstraint,
     tolerance: float = 1e-6,
 ) -> None:
-    """
-    Verifies that the extracted relative pose reconstructs the optimized
+    """Verifies that the extracted relative pose reconstructs the optimized
     final keyframe pose from the optimized initial keyframe pose.
     """
     optimized = bundle_solution.result.optimized

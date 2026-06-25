@@ -21,8 +21,7 @@ def plot_four_image_matches(
     temporal_data: TemporalMatchData,
     num_to_draw: int = NUM_TEMPORAL_MATCHES_TO_DRAW,
 ) -> None:
-    """
-    Plots the four images in a 2x2 grid:
+    """Plots the four images in a 2x2 grid:
         left_0   right_0
         left_1   right_1
 

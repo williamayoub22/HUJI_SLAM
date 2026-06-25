@@ -33,8 +33,7 @@ def match_left_frames(
     use_ratio_test: bool = True,
     ratio_threshold: float = RATIO_THRESHOLD,
 ) -> TemporalMatchData:
-    """
-    Matches features between the left images of two frames.
+    """Matches features between the left images of two frames.
 
     This is temporal matching, not stereo matching, so no vertical-deviation
     filtering is applied here.

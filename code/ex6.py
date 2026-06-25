@@ -18,7 +18,6 @@ from slam.visualization.ex6_plots import (
     plot_bundle_window_trajectory_with_covariances,
     plot_pose_graph_top_down,
     positions_from_values,
-    positions_from_world_to_camera_extrinsics,
 )
 
 
@@ -27,8 +26,7 @@ def q_1(
     world_to_camera_extrinsics,
     calibration,
 ):
-    """
-    Section 6.1:
+    """Section 6.1:
     1. Solve all BA windows from Ex5.
     2. Extract one relative pose constraint and conditional covariance
        for every consecutive keyframe pair.
@@ -79,8 +77,7 @@ def q_2(
     world_to_camera_extrinsics,
     constraints,
 ):
-    """
-    Section 6.2:
+    """Section 6.2:
     1. Build the keyframe pose graph.
     2. Initialize it by chaining the relative-pose constraints.
     3. Optimize it.
@@ -161,6 +158,7 @@ def main() -> None:
         world_to_camera_extrinsics=world_to_camera_extrinsics,
         constraints=constraints,
     )
+
 
 if __name__ == "__main__":
     main()

@@ -81,7 +81,6 @@ def find_near_miss_match(knn_matches: list, ratio_threshold: float):
     this is for the very last question:
     "Present a correct match (as a dot on each image) that failed the significance test."
     """
-
     best_failed_match = None
     lowest_failed_ratio = float("inf")  # Start infinitely high
 

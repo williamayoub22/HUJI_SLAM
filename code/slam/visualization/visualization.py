@@ -8,7 +8,6 @@ def plot_point_cloud_on_axis(
     color: str = "tab:blue",
 ) -> None:
     """Plots a 3D point cloud on a given axis."""
-
     ax.scatter(
         points_3d[:, 0],
         points_3d[:, 1],

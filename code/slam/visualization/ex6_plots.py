@@ -51,8 +51,7 @@ def plot_pose_graph_top_down(
     marginals: gtsam.Marginals | None = None,
     frame_ids: list[int] | None = None,
 ) -> None:
-    """
-    Reproduces the Ex6.2 plotting style from the original ex6.py.
+    """Reproduces the Ex6.2 plotting style from the original ex6.py.
     """
     output_path.parent.mkdir(
         parents=True,
@@ -68,7 +67,6 @@ def plot_pose_graph_top_down(
         color="blue",
         linewidth=2,
     )
-
 
     if marginals is not None and frame_ids is not None:
         for index, frame_id in enumerate(frame_ids):
@@ -161,8 +159,7 @@ def plot_bundle_window_trajectory_with_covariances(
     optimized_values: gtsam.Values,
     output_path: Path,
 ) -> None:
-    """
-    3D covariance plot for Ex6.1, as requested by the exercise.
+    """3D covariance plot for Ex6.1, as requested by the exercise.
     """
     from gtsam.utils import plot
 

@@ -9,8 +9,7 @@ def build_pose_graph(
     first_pose: gtsam.Pose3,
     prior_sigma: float = 1e-6,
 ) -> tuple[gtsam.NonlinearFactorGraph, gtsam.Values, list[int]]:
-    """
-    Builds a pose graph containing:
+    """Builds a pose graph containing:
     - a prior on the first keyframe,
     - one BetweenFactorPose3 per BA-derived relative constraint,
     - an initial estimate obtained by chaining relative motions.

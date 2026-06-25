@@ -24,8 +24,7 @@ def track_sequence(
     deviation_threshold: float = 2.0,
     max_depth: float = 300.0,
 ) -> tuple[np.ndarray, list[np.ndarray], float]:
-    """
-    Tracks the left camera through the sequence.
+    """Tracks the left camera through the sequence.
 
     Returns:
         estimated_positions: Nx3 camera centers in left_0 coordinates.

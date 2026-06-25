@@ -8,8 +8,7 @@ def optimize_pose_graph(
     initial_estimates: gtsam.Values,
     keyframe_ids: list[int],
 ) -> PoseGraphResult:
-    """
-    Optimizes a pose graph and stores initial/final factor-graph errors.
+    """Optimizes a pose graph and stores initial/final factor-graph errors.
     """
     initial_error = graph.error(initial_estimates)
 

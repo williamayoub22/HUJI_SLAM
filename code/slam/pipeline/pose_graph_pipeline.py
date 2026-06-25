@@ -5,16 +5,13 @@ import numpy as np
 from slam.ba.gtsam_utils import make_gtsam_stereo_calibration
 from slam.ba.window_selection import choose_keyframes_by_interval
 from slam.ba.window_solver import solve_all_bundle_windows
-from slam.config import DB_PATH, GLOBAL_CAMERA_MATRICES_PATH
-from slam.io.calibration import read_stereo_calibration
-from slam.pipeline.database_pipeline import load_tracking_database
-from slam.pose_graph.constraints import extract_relative_pose_constraint
 from slam.config import (
     DB_PATH,
     GLOBAL_CAMERA_MATRICES_PATH,
-    GT_POSES_PATH,
 )
-from slam.io.poses import read_ground_truth_poses
+from slam.io.calibration import read_stereo_calibration
+from slam.pipeline.database_pipeline import load_tracking_database
+from slam.pose_graph.constraints import extract_relative_pose_constraint
 
 
 def load_ex6_inputs():
@@ -41,8 +38,7 @@ def solve_bundle_windows_and_extract_constraints(
     keyframe_step: int = 10,
     verbose: bool = True,
 ):
-    """
-    Solves all local BA windows and converts each optimized window into
+    """Solves all local BA windows and converts each optimized window into
     one relative keyframe constraint for the pose graph.
     """
     keyframes = choose_keyframes_by_interval(

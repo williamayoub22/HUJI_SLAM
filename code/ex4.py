@@ -37,10 +37,9 @@ DB_PATH = OUTPUT_DIR / "tracking_db"
 
 
 def build_or_load_database():
-    """
-    Section 4.1: Build the tracking database (or load from disk).
+    """Section 4.1: Build the tracking database (or load from disk).
 
-    Returns
+    Returns:
     -------
     db : TrackingDB
     inlier_percentages : list[float]
@@ -84,8 +83,7 @@ def build_or_load_database():
 #              SECTION 4.2 — Tracking Statistics
 # ############################################################################
 def compute_and_print_statistics(db: TrackingDB):
-    """
-    Section 4.2: Compute and print tracking statistics.
+    """Section 4.2: Compute and print tracking statistics.
 
     Uses the existing compute_tracking_statistics() from tracking_stats.py.
     The TrackingDB guarantees all tracks have length >= 2, so no trivial
@@ -108,8 +106,7 @@ def compute_and_print_statistics(db: TrackingDB):
 #  SECTION 4.3 — Display a Track of Length >= 6
 # ############################################################################
 def display_track_length_6(db: TrackingDB):
-    """
-    Section 4.3: Pick a track of length >= 6 and show 20×20 crops
+    """Section 4.3: Pick a track of length >= 6 and show 20×20 crops
     around the feature on each left image, plus the full image with
     the feature marked.
     """
@@ -186,8 +183,7 @@ def display_track_length_6(db: TrackingDB):
 
 
 def plot_connectivity(db: TrackingDB):
-    """
-    Section 4.4: For each frame, plot the number of tracks that also
+    """Section 4.4: For each frame, plot the number of tracks that also
     appear in the *next* frame (outgoing tracks).
     """
     print("\n" + "=" * 60)
@@ -225,8 +221,7 @@ def plot_connectivity(db: TrackingDB):
 
 
 def plot_inlier_percentages(inlier_percentages):
-    """
-    Section 4.5: Plot percentage of PnP inliers per frame transition.
+    """Section 4.5: Plot percentage of PnP inliers per frame transition.
     """
     print("\n" + "=" * 60)
     print("[4.5] Plotting inlier percentages …")
@@ -258,8 +253,7 @@ def plot_inlier_percentages(inlier_percentages):
 
 
 def plot_track_length_histogram(track_lengths):
-    """
-    Section 4.6: Histogram of track lengths (log scale y-axis).
+    """Section 4.6: Histogram of track lengths (log scale y-axis).
     ``track_lengths`` should already exclude trivial (length-1) tracks.
     """
     print("\n" + "=" * 60)
@@ -290,8 +284,7 @@ def plot_track_length_histogram(track_lengths):
 
 
 def plot_reprojection_error(db: TrackingDB):
-    """
-    Section 4.7: Pick a random track of length >= 10.  Triangulate its 3D
+    """Section 4.7: Pick a random track of length >= 10.  Triangulate its 3D
     point from the *last* frame using GT poses, project it back to all
     frames, and plot L2 reprojection error vs distance from reference.
     """

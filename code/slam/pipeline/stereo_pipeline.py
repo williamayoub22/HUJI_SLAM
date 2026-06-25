@@ -80,8 +80,7 @@ def keep_valid_depth_points(
     right_pts: np.ndarray,
     max_depth: float = MAX_DEPTH,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Keeps only triangulated points with positive depth and within max_depth.
+    """Keeps only triangulated points with positive depth and within max_depth.
     Points with z <= 0 are behind the camera; points with z >= max_depth
     amplify noise and hurt PnP estimation.
     """
@@ -104,8 +103,7 @@ def create_stereo_point_cloud(
     num_features: int = 1000,
     use_ratio_test: bool = False,
 ) -> StereoPointCloud:
-    """
-    Creates a 3D point cloud for one stereo pair.
+    """Creates a 3D point cloud for one stereo pair.
 
     Pipeline:
     1. Load and match the left/right stereo images.

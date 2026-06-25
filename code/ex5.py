@@ -5,19 +5,19 @@ import numpy as np
 from gtsam.symbol_shorthand import C
 
 from slam.analysis.bundle_diagnostics import analyze_largest_initial_projection_factor
+from slam.analysis.track_reprojection import analyze_track_reprojection
 from slam.ba.gtsam_utils import make_gtsam_stereo_calibration
+from slam.ba.optimization import optimize_bundle_window
+from slam.ba.results import BundleWindowSolution
 from slam.ba.window_composition import (
     collect_landmarks_in_frame0,
     compose_keyframe_poses_in_frame0,
 )
-from slam.ba.optimization import optimize_bundle_window
-from slam.analysis.track_reprojection import analyze_track_reprojection
-from slam.ba.results import BundleWindowSolution
-from slam.ba.window_solver import solve_all_bundle_windows
 from slam.ba.window_selection import (
-    choose_keyframes_by_interval,
     bundle_windows_from_keyframes,
+    choose_keyframes_by_interval,
 )
+from slam.ba.window_solver import solve_all_bundle_windows
 from slam.config import (
     DB_PATH,
     EX5_OUTPUT_DIR,
@@ -25,6 +25,9 @@ from slam.config import (
     GT_POSES_PATH,
     LEFT_IMAGES_DIR,
     RIGHT_IMAGES_DIR,
+)
+from slam.geometry.transforms import (
+    camera_centers_from_world_to_camera_extrinsics,
 )
 from slam.io.calibration import read_stereo_calibration
 from slam.pipeline.database_pipeline import load_tracking_database
@@ -35,10 +38,6 @@ from slam.visualization.ex5_plots import (
     plot_largest_factor_diagnostic,
     plot_reprojection_errors_q5_1,
 )
-from slam.geometry.transforms import (
-    camera_centers_from_world_to_camera_extrinsics,
-)
-
 from slam.visualization.trajectory import (
     plot_bundle_scene_3d,
     plot_bundle_scene_top_down,
@@ -113,8 +112,7 @@ def _print_bundle_summary(keyframes, window_frames, result):
 
 
 def question5_3(db, world_to_camera_extrinsics, calibration):
-    """
-    Exercise 5.3:
+    """Exercise 5.3:
     Runs local bundle adjustment on the first keyframe window.
     """
     keyframes = choose_keyframes_by_interval(

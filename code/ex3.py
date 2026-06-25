@@ -41,8 +41,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent / "outputs" / "ex3"
 
 
 def section_3_1() -> tuple[StereoPointCloud, StereoPointCloud]:
-    """
-    Section 3.1:
+    """Section 3.1:
     Creates point clouds for stereo pair 0 and stereo pair 1.
 
     Pair 0 is the point cloud from Exercise 2.
@@ -96,8 +95,7 @@ def section_3_2(
     point_cloud_0: StereoPointCloud,
     point_cloud_1: StereoPointCloud,
 ) -> tuple[np.ndarray, np.ndarray, list[cv2.DMatch]]:
-    """
-    Section 3.2:
+    """Section 3.2:
     Matches features between the two left images: left_0 and left_1.
     """
     print("--- Section 3.2 ---")
@@ -236,8 +234,7 @@ def section_3_5(
     left0_pts: np.ndarray,
     left1_pts: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Runs RANSAC with PnP as the inner model, refines the transformation using
+    """Runs RANSAC with PnP as the inner model, refines the transformation using
     all inliers, and plots the final inliers/outliers and transformed point clouds.
     """
     print("--- Section 3.5 ---")
