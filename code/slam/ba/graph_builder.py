@@ -92,9 +92,7 @@ def build_local_bundle_graph(
             world_to_frame=T_world_to_frame,
         )
 
-        poses[frame_id] = pose3_from_world_to_camera_extrinsic(
-            T_first_to_frame
-        )
+        poses[frame_id] = pose3_from_world_to_camera_extrinsic(T_first_to_frame)
 
         stereo_cameras[frame_id] = make_stereo_camera(
             T_first_to_frame,

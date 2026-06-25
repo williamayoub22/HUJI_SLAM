@@ -67,7 +67,7 @@ def _compute_stereo_inlier_mask(
         y_left = kp_left[match.queryIdx].pt[1]
         x_right = kp_right[match.trainIdx].pt[0]
         y_right = kp_right[match.trainIdx].pt[1]
-        
+
         valid_y = abs(y_left - y_right) <= deviation_threshold
         valid_x = (x_left - x_right) > 0.5  # Positive disparity check
 
