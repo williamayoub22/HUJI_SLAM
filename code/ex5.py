@@ -288,9 +288,7 @@ def init():
     calibration = make_gtsam_stereo_calibration(P1, P2)
 
     gt_world_to_camera_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
-    gt_positions_all = camera_centers_from_world_to_camera_extrinsics(
-        gt_world_to_camera_extrinsics
-    )
+    gt_positions_all = camera_centers_from_world_to_camera_extrinsics(gt_world_to_camera_extrinsics)
 
     return calibration, db, world_to_camera_extrinsics, gt_positions_all
 

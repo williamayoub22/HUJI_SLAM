@@ -349,12 +349,8 @@ def section_3_6() -> None:
         np.asarray(relative_transforms),
     )
 
-    world_to_camera_extrinsics = compose_frame0_to_camera_extrinsics(
-        relative_transforms
-    )
-    camera_centers = camera_centers_from_world_to_camera_extrinsics(
-        world_to_camera_extrinsics
-    )
+    world_to_camera_extrinsics = compose_frame0_to_camera_extrinsics(relative_transforms)
+    camera_centers = camera_centers_from_world_to_camera_extrinsics(world_to_camera_extrinsics)
 
     np.save(
         OUTPUT_DIR / "global_camera_matrices.npy",

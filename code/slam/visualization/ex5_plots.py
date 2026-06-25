@@ -5,7 +5,7 @@ import gtsam
 import matplotlib.pyplot as plt
 import numpy as np
 
-from code.slam.analysis.bundle_diagnostics import LargestFactorDiagnostic
+from slam.analysis.bundle_diagnostics import LargestFactorDiagnostic
 
 
 def _make_track_x_axis(frame_ids: list[int], use_track_index: bool):
