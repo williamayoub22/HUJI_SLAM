@@ -137,8 +137,8 @@ def plot_pose_graph_top_down(
         )
 
     axis.set_title(title)
-    axis.set_xlabel("X")
-    axis.set_ylabel("Z")
+    axis.set_xlabel("X [m]")
+    axis.set_ylabel("Z [m]")
     axis.axis("equal")
     axis.grid(True)
     axis.legend()
@@ -159,8 +159,7 @@ def plot_bundle_window_trajectory_with_covariances(
     optimized_values: gtsam.Values,
     output_path: Path,
 ) -> None:
-    """3D covariance plot for Ex6.1, as requested by the exercise.
-    """
+    """Plots the first BA window with GTSAM marginal covariances."""
     from gtsam.utils import plot
 
     output_path.parent.mkdir(
@@ -178,15 +177,15 @@ def plot_bundle_window_trajectory_with_covariances(
     plot.plot_trajectory(
         figure.number,
         optimized_values,
-        marginals=marginals,
         scale=1,
+        marginals=marginals,
+        title="BA for First Window with Covariance",
+        axis_labels=("X [m]", "Y [m]", "Z [m]"),
     )
-
-    plt.tight_layout()
 
     print(f"Saving plot to: {output_path}")
 
-    plt.savefig(
+    figure.savefig(
         output_path,
         dpi=200,
     )
