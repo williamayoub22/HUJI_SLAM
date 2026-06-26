@@ -2,23 +2,37 @@ import gtsam
 from gtsam.symbol_shorthand import C
 
 from slam.pose_graph.constraints import RelativePoseConstraint
+from dataclasses import dataclass
 
+import gtsam
+from gtsam.symbol_shorthand import C
+
+from slam.pose_graph.constraints import RelativePoseConstraint
+from slam.pose_graph.covariance_routing import (
+    CovarianceGraph,
+    symmetrize_covariance,
+)
+
+
+@dataclass
+class PoseGraphBuildResult:
+    graph: gtsam.NonlinearFactorGraph
+    initial_estimates: gtsam.Values
+    keyframe_ids: list[int]
+    covariance_graph: CovarianceGraph
 
 def build_pose_graph(
     constraints: list[RelativePoseConstraint],
     first_pose: gtsam.Pose3,
     prior_sigma: float = 1e-6,
-) -> tuple[gtsam.NonlinearFactorGraph, gtsam.Values, list[int]]:
-    """Builds a pose graph containing:
-    - a prior on the first keyframe,
-    - one BetweenFactorPose3 per BA-derived relative constraint,
-    - an initial estimate obtained by chaining relative motions.
-    """
+) -> PoseGraphBuildResult:
+    """Build the GTSAM pose graph and its covariance-routing counterpart."""
     if not constraints:
         raise ValueError("Cannot build a pose graph without relative constraints.")
 
     graph = gtsam.NonlinearFactorGraph()
     initial_estimates = gtsam.Values()
+    covariance_graph = CovarianceGraph()
 
     constraints = sorted(
         constraints,
@@ -52,7 +66,7 @@ def build_pose_graph(
                 f"Missing initial estimate for frame {constraint.start_frame}."
             )
 
-        covariance = 0.5 * (constraint.covariance + constraint.covariance.T)
+        covariance = symmetrize_covariance(constraint.covariance)
 
         noise_model = gtsam.noiseModel.Gaussian.Covariance(
             covariance,
@@ -67,6 +81,12 @@ def build_pose_graph(
             )
         )
 
+        covariance_graph.add_edge(
+            start_frame=constraint.start_frame,
+            end_frame=constraint.end_frame,
+            covariance=covariance,
+        )
+
         if not initial_estimates.exists(end_key):
             start_pose = initial_estimates.atPose3(start_key)
             end_pose = start_pose.compose(
@@ -75,4 +95,9 @@ def build_pose_graph(
             initial_estimates.insert(end_key, end_pose)
             keyframe_ids.append(constraint.end_frame)
 
-    return graph, initial_estimates, keyframe_ids
+    return PoseGraphBuildResult(
+        graph=graph,
+        initial_estimates=initial_estimates,
+        keyframe_ids=keyframe_ids,
+        covariance_graph=covariance_graph,
+    )

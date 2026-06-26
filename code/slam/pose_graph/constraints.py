@@ -10,7 +10,6 @@ from slam.ba.results import BundleWindowSolution
 @dataclass(frozen=True)
 class RelativePoseConstraint:
     """One relative keyframe measurement extracted from a BA window."""
-
     start_frame: int
     end_frame: int
     relative_pose: gtsam.Pose3
