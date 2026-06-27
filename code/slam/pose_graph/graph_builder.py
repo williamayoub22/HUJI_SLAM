@@ -1,17 +1,13 @@
-import gtsam
-from gtsam.symbol_shorthand import C
-
-from slam.pose_graph.constraints import RelativePoseConstraint
 from dataclasses import dataclass
 
 import gtsam
 from gtsam.symbol_shorthand import C
-
-from slam.pose_graph.constraints import RelativePoseConstraint
 from slam.pose_graph.covariance_routing import (
     CovarianceGraph,
     symmetrize_covariance,
 )
+
+from slam.pose_graph.constraints import RelativePoseConstraint
 
 
 @dataclass
@@ -20,6 +16,7 @@ class PoseGraphBuildResult:
     initial_estimates: gtsam.Values
     keyframe_ids: list[int]
     covariance_graph: CovarianceGraph
+
 
 def build_pose_graph(
     constraints: list[RelativePoseConstraint],

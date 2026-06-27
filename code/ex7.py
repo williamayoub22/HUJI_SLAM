@@ -1,4 +1,3 @@
-
 # Full ex7 pipeline:
 # The full pipeline will be:
 #
@@ -18,5 +17,6 @@ def main():
     # Question 1 - Relative Covariance
     pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -3,10 +3,8 @@
 from dataclasses import dataclass
 
 import numpy as np
-
 from slam.pose_graph.covariance_routing import (
     CovarianceGraph,
-    CovariancePath,
 )
 
 
@@ -18,6 +16,7 @@ class LoopClosureCandidate:
     uncertainty_score: float
     path_keyframes: list[int]
 
+
 def find_loop_closure_candidates(
     keyframe_ids: list[int],
     covariance_graph: CovarianceGraph,
@@ -27,7 +26,6 @@ def find_loop_closure_candidates(
 
     for n_index, frame_n in enumerate(keyframe_ids):
         for i_index, frame_i in enumerate(keyframe_ids[:n_index]):
-
             # Avoid trivial nearby-frame matches.
             if n_index - i_index < min_keyframe_index_gap:
                 continue
@@ -51,6 +49,8 @@ def find_loop_closure_candidates(
             )
 
     return candidates
+
+
 # For now, this function can return all candidate pairs. Later you can add:
 #
 # * max_candidates_per_frame;

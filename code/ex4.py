@@ -221,8 +221,7 @@ def plot_connectivity(db: TrackingDB):
 
 
 def plot_inlier_percentages(inlier_percentages):
-    """Section 4.5: Plot percentage of PnP inliers per frame transition.
-    """
+    """Section 4.5: Plot percentage of PnP inliers per frame transition."""
     print("\n" + "=" * 60)
     print("[4.5] Plotting inlier percentages …")
     print("=" * 60)

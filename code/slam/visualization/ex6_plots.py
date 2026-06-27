@@ -51,8 +51,7 @@ def plot_pose_graph_top_down(
     marginals: gtsam.Marginals | None = None,
     frame_ids: list[int] | None = None,
 ) -> None:
-    """Reproduces the Ex6.2 plotting style from the original ex6.py.
-    """
+    """Reproduces the Ex6.2 plotting style from the original ex6.py."""
     output_path.parent.mkdir(
         parents=True,
         exist_ok=True,

@@ -25,8 +25,7 @@ def plot_reprojection_errors_q5_1(
     output_path: str | Path,
     use_track_index: bool = True,
 ) -> None:
-    """Plots the stereo reprojection L2 error over the selected track.
-    """
+    """Plots the stereo reprojection L2 error over the selected track."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -56,8 +55,7 @@ def plot_factor_errors_q5_1(
     output_path: str | Path,
     use_track_index: bool = True,
 ) -> None:
-    """Plots the GTSAM stereo factor error over the selected track.
-    """
+    """Plots the GTSAM stereo factor error over the selected track."""
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
