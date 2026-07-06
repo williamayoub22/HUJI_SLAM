@@ -4,12 +4,12 @@ import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
 
-from slam.pose_graph.constraints import RelativePoseConstraint
-from slam.pose_graph.covariance_routing import (
+from src.slam.pose_graph.constraints import RelativePoseConstraint
+from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
 )
 
-from code.slam.pose_graph.constraints import symmetrize
+from src.slam.pose_graph.constraints import symmetrize
 
 
 @dataclass
@@ -134,9 +134,119 @@ def build_pose_graph(
             )
             keyframe_ids.append(end_frame)
 
+    # validate_constraints(
+    #     constraints=constraints,
+    #     initial_estimates=initial_estimates,
+    # )
+
     return PoseGraphBuildResult(
         graph=graph,
         initial_estimates=initial_estimates,
         keyframe_ids=keyframe_ids,
         covariance_graph=covariance_graph,
     )
+
+
+#DEBUG:
+def validate_constraints(
+    constraints: list[RelativePoseConstraint],
+    initial_estimates: gtsam.Values,
+) -> None:
+    """
+    Verify that each relative constraint, its covariance, and its information
+    matrix are mutually consistent with the initial pose chain.
+    """
+    print("\n" + "=" * 60)
+    print("Pose-graph constraint consistency checks")
+    print("=" * 60)
+
+    max_inverse_error = 0.0
+    max_pose_residual = 0.0
+    min_cov_eigenvalue = float("inf")
+    max_cov_condition = 0.0
+
+    for index, constraint in enumerate(constraints):
+        covariance = symmetrize(
+            np.asarray(constraint.covariance, dtype=float)
+        )
+        information = np.asarray(
+            constraint.information,
+            dtype=float,
+        )
+        information = 0.5 * (information + information.T)
+
+        if covariance.shape != (6, 6):
+            raise ValueError(
+                f"Constraint {index}: covariance shape is {covariance.shape}, "
+                "expected (6, 6)."
+            )
+
+        if information.shape != (6, 6):
+            raise ValueError(
+                f"Constraint {index}: information shape is {information.shape}, "
+                "expected (6, 6)."
+            )
+
+        if not np.all(np.isfinite(covariance)):
+            raise ValueError(f"Constraint {index}: covariance has NaN/inf.")
+
+        if not np.all(np.isfinite(information)):
+            raise ValueError(f"Constraint {index}: information has NaN/inf.")
+
+        covariance_eigenvalues = np.linalg.eigvalsh(covariance)
+        information_eigenvalues = np.linalg.eigvalsh(information)
+
+        if np.min(covariance_eigenvalues) <= 0:
+            raise ValueError(
+                f"Constraint {index}: covariance is not positive definite; "
+                f"min eigenvalue={np.min(covariance_eigenvalues):.3e}"
+            )
+
+        if np.min(information_eigenvalues) <= 0:
+            raise ValueError(
+                f"Constraint {index}: information is not positive definite; "
+                f"min eigenvalue={np.min(information_eigenvalues):.3e}"
+            )
+
+        inverse_error = np.linalg.norm(
+            covariance @ information - np.eye(6),
+            ord="fro",
+        )
+
+        condition_number = np.linalg.cond(covariance)
+
+        start_pose = initial_estimates.atPose3(C(constraint.start_frame))
+        end_pose = initial_estimates.atPose3(C(constraint.end_frame))
+
+        predicted_relative_pose = start_pose.between(end_pose)
+
+        pose_residual = gtsam.Pose3.Logmap(
+            constraint.relative_pose.inverse().compose(
+                predicted_relative_pose
+            )
+        )
+        pose_residual_norm = float(np.linalg.norm(pose_residual))
+
+        max_inverse_error = max(max_inverse_error, inverse_error)
+        max_pose_residual = max(max_pose_residual, pose_residual_norm)
+        min_cov_eigenvalue = min(
+            min_cov_eigenvalue,
+            float(np.min(covariance_eigenvalues)),
+        )
+        max_cov_condition = max(max_cov_condition, condition_number)
+
+        if index < 5:
+            print(f"\nConstraint {index}: "
+                  f"c_{constraint.start_frame} -> c_{constraint.end_frame}")
+            print(f"  covariance std: {np.sqrt(np.diag(covariance))}")
+            print(f"  covariance eig: {covariance_eigenvalues}")
+            print(f"  covariance cond: {condition_number:.3e}")
+            print(f"  ||Sigma Lambda - I||_F: {inverse_error:.3e}")
+            print(f"  initial relative-pose residual: {pose_residual_norm:.3e}")
+
+    print("\nSummary:")
+    print(f"  max ||Sigma Lambda - I||_F: {max_inverse_error:.3e}")
+    print(f"  max initial pose residual:  {max_pose_residual:.3e}")
+    print(f"  minimum covariance eigenvalue: {min_cov_eigenvalue:.3e}")
+    print(f"  maximum covariance condition:   {max_cov_condition:.3e}")
+
