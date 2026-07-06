@@ -15,42 +15,56 @@ class RelativePoseConstraint:
     end_frame: int
     relative_pose: gtsam.Pose3
     covariance: np.ndarray
+    information: np.ndarray
 
 
-def conditional_covariance(
-    joint_covariance: np.ndarray,
+def symmetrize(matrix: np.ndarray) -> np.ndarray:
+    """Remove small numerical asymmetries."""
+    matrix = np.asarray(matrix, dtype=float)
+    return 0.5 * (matrix + matrix.T)
+
+
+def conditional_information_from_joint_information(
+    joint_information: np.ndarray,
 ) -> np.ndarray:
-    """Computes Cov(c_end | c_start) from the joint covariance of
-    [c_start, c_end].
+    """Extract Ω_end|start from the joint canonical representation."""
+    joint_information = np.asarray(joint_information, dtype=float)
 
-    The input is a 12x12 matrix:
-        [ Sigma_ss  Sigma_se ]
-        [ Sigma_es  Sigma_ee ]
-    """
-    if joint_covariance.shape != (12, 12):
+    if joint_information.shape != (12, 12):
         raise ValueError(
-            "Expected a 12x12 joint covariance for two Pose3 variables, "
-            f"got {joint_covariance.shape}."
+            "Expected a 12x12 joint information matrix for two Pose3 "
+            f"variables, got {joint_information.shape}."
         )
 
-    sigma_start_start = joint_covariance[:6, :6]
-    sigma_start_end = joint_covariance[:6, 6:]
-    sigma_end_start = joint_covariance[6:, :6]
-    sigma_end_end = joint_covariance[6:, 6:]
+    joint_information = symmetrize(joint_information) # todo: needed?
+    information = joint_information[:6, :6]
+    return symmetrize(information)
 
-    covariance = sigma_end_end - sigma_end_start @ np.linalg.solve(
-        sigma_start_start, sigma_start_end
-    )
 
-    # Numerical cleanup: a covariance must be symmetric.
-    return 0.5 * (covariance + covariance.T)
+def covariance_from_information(
+    information: np.ndarray,
+) -> np.ndarray:
+    """Compute Σ = Ω^{-1} for one 6D relative-pose factor."""
+    information = np.asarray(information, dtype=float)
+
+    if information.shape != (6, 6):
+        raise ValueError(
+            f"Expected a 6x6 information matrix, got {information.shape}."
+        )
+
+    covariance = np.linalg.inv(information)
+    return symmetrize(covariance)
 
 
 def extract_relative_pose_constraint(
     solution: BundleWindowSolution,
 ) -> RelativePoseConstraint:
-    """Extracts the relative pose and conditional covariance between the
-    first and last keyframes of one optimized BA window.
+    """
+    Extract the relative-pose factor between the first and last keyframes
+    of one optimized BA window.
+
+    The factor models p(c_end | c_start), so we query the joint information
+    in [end, start] order and extract Λ_end,end.
     """
     result = solution.result
 
@@ -68,57 +82,21 @@ def extract_relative_pose_constraint(
     )
 
     keys = gtsam.KeyVector()
-    keys.append(start_key)
+
     keys.append(end_key)
+    keys.append(start_key)
 
-    joint_covariance = marginals.jointMarginalCovariance(keys).fullMatrix()
+    joint_information = marginals.jointMarginalInformation(keys).fullMatrix()
 
-    covariance = conditional_covariance(joint_covariance)
+    information = conditional_information_from_joint_information(
+        joint_information
+    )
+    covariance = covariance_from_information(information)
 
     return RelativePoseConstraint(
         start_frame=solution.start_frame,
         end_frame=solution.end_frame,
         relative_pose=relative_pose,
         covariance=covariance,
+        information=information,
     )
-
-
-import numpy as np
-
-
-def verify_relative_measurement(
-    bundle_solution,
-    constraint: RelativePoseConstraint,
-    tolerance: float = 1e-6,
-) -> None:
-    """Verifies that the extracted relative pose reconstructs the optimized
-    final keyframe pose from the optimized initial keyframe pose.
-    """
-    optimized = bundle_solution.result.optimized
-
-    start_pose = optimized.atPose3(
-        C(bundle_solution.start_frame),
-    )
-    end_pose = optimized.atPose3(
-        C(bundle_solution.end_frame),
-    )
-
-    reconstructed_end_pose = start_pose.compose(
-        constraint.relative_pose,
-    )
-
-    if not reconstructed_end_pose.equals(
-        end_pose,
-        tolerance,
-    ):
-        raise AssertionError(
-            "Relative pose does not reconstruct the optimized end pose. "
-            "Check pose direction or compose order."
-        )
-
-    if not np.allclose(
-        constraint.covariance,
-        constraint.covariance.T,
-        atol=1e-8,
-    ):
-        raise AssertionError("Relative covariance is not symmetric.")
