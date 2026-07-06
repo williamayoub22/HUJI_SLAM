@@ -7,28 +7,19 @@ from dataclasses import dataclass
 
 import numpy as np
 
-
-def symmetrize_covariance(covariance: np.ndarray) -> np.ndarray:
-    """Return a numerically symmetric 6x6 covariance matrix."""
-    covariance = np.asarray(covariance, dtype=float)
-
-    if covariance.shape != (6, 6):
-        raise ValueError(f"Expected covariance shape (6, 6), got {covariance.shape}.")
-
-    return 0.5 * (covariance + covariance.T)
+from slam.pose_graph.constraints import symmetrize
 
 
-def covariance_determinant(covariance: np.ndarray) -> float:
-    """Return det(covariance), the uncertainty-volume score.
-
-    The determinant is proportional to the squared volume of the covariance
-    ellipsoid. Smaller determinant means a more certain accumulated path.
+def covariance_volume(covariance: np.ndarray) -> float:
     """
-    covariance = symmetrize_covariance(covariance)
+    Return the uncertainty-volume score det(Sigma).
+
+    For a Gaussian covariance ellipsoid, this is proportional to its volume sqrt(det(Sigma)).
+    """
+    covariance = symmetrize(covariance)
 
     determinant = float(np.linalg.det(covariance))
 
-    # Small negative values may occur because of floating-point error.
     if determinant < -1e-10:
         raise ValueError(
             "Covariance determinant is negative. "
@@ -39,42 +30,38 @@ def covariance_determinant(covariance: np.ndarray) -> float:
 
 
 def sum_covariances(covariances: list[np.ndarray]) -> np.ndarray:
-    """Approximate relative covariance by summing the directed edge covariances
-    along a selected path.
-    """
+    """Approximate path covariance by summing its edge covariances."""
     total = np.zeros((6, 6), dtype=float)
 
     for covariance in covariances:
-        total += symmetrize_covariance(covariance)
+        total += symmetrize(covariance)
 
-    return symmetrize_covariance(total)
+    return symmetrize(total)
 
 
 @dataclass(frozen=True)
 class CovarianceEdge:
-    """A directed relative-pose measurement edge.
+    """Directed relative-pose measurement edge."""
 
-    covariance represents the uncertainty of the measurement:
-        source_frame -> neighbor_frame
-    """
     neighbor_frame: int
     covariance: np.ndarray
 
 
 @dataclass(frozen=True)
 class CovariancePath:
-    """Minimum-uncertainty directed path and its accumulated covariance."""
+    """Minimum-volume covariance path."""
+
     frame_ids: list[int]
     covariance: np.ndarray
     cost: float
 
 
 class CovarianceGraph:
-    """Directed graph for covariance-aware shortest-path search.
+    """
+    Directed graph for the covariance-valued shortest-path approximation.
 
-    Each edge u -> v stores w(u, v), namely the covariance of the relative
-    measurement from u to v. Dijkstra stores an accumulated covariance
-    Sigma[v] for each vertex and compares paths using det(Sigma[v]).
+    Each edge u -> v stores the 6x6 covariance of the relative measurement.
+    Matrix addition accumulates path covariances. Paths are ranked by det(accumulated covariance).
     """
 
     def __init__(self) -> None:
@@ -86,12 +73,8 @@ class CovarianceGraph:
         target_frame: int,
         covariance: np.ndarray,
     ) -> None:
-        """Add the directed measurement-edge source_frame -> target_frame.
-
-        This does not add the reverse edge automatically. If you have a valid
-        reverse relative-pose covariance, add it separately.
-        """
-        covariance = symmetrize_covariance(covariance)
+        """Add the relative-pose covariance for source_frame -> target_frame."""
+        covariance = symmetrize(covariance)
 
         self._adjacency[source_frame].append(
             CovarianceEdge(
@@ -109,16 +92,13 @@ class CovarianceGraph:
         source_frame: int,
         target_frame: int,
     ) -> CovariancePath | None:
-        """Find the minimum-determinant covariance path from source to target.
+        """
+        Return the path with minimum accumulated covariance volume.
 
-        For every node v, maintain:
-            Sigma[v] = accumulated covariance of the best path found to v.
+        For a candidate extension u -> v:
+            Sigma_candidate = Sigma[u] + Sigma_uv
 
-        Relaxation over directed-edge u -> v:
-            Sigma_candidate = Sigma[u] + w(u, v)
-
-        The candidate replaces Sigma[v] when:
-            det(Sigma_candidate) < det(Sigma[v]).
+        and its priority is: det(Sigma_candidate).
         """
         if source_frame == target_frame:
             return CovariancePath(
@@ -132,23 +112,16 @@ class CovarianceGraph:
 
         zero_covariance = np.zeros((6, 6), dtype=float)
 
-        # Sigma[v] in the lecture slide.
         best_covariances: dict[int, np.ndarray] = {
             source_frame: zero_covariance,
         }
-
-        # Scalar priority used only by heapq / Extract-Min.
         best_costs: dict[int, float] = {
             source_frame: 0.0,
         }
 
-        # child -> (parent, covariance of the selected parent -> child edge)
         parents: dict[int, tuple[int, np.ndarray]] = {}
 
-        # Counter prevents Python from trying to compare frame IDs in ties.
         insertion_counter = itertools.count()
-
-        # Entries: (determinant score, tie breaker, frame ID).
         priority_queue: list[tuple[float, int, int]] = [
             (0.0, next(insertion_counter), source_frame),
         ]
@@ -156,7 +129,6 @@ class CovarianceGraph:
         while priority_queue:
             current_cost, _, current_frame = heapq.heappop(priority_queue)
 
-            # Ignore stale entries inserted before a later improvement.
             if current_cost > best_costs[current_frame]:
                 continue
 
@@ -166,8 +138,8 @@ class CovarianceGraph:
             current_covariance = best_covariances[current_frame]
 
             for edge in self.neighbors(current_frame):
-                candidate_covariance = symmetrize_covariance(current_covariance + edge.covariance)
-                candidate_cost = covariance_determinant(candidate_covariance)
+                candidate_covariance = symmetrize(current_covariance + edge.covariance)
+                candidate_cost = covariance_volume(candidate_covariance)
 
                 previous_cost = best_costs.get(
                     edge.neighbor_frame,
@@ -194,18 +166,18 @@ class CovarianceGraph:
         if target_frame not in best_covariances:
             return None
 
-        path_frame_ids = [target_frame]
+        frame_ids = [target_frame]
         current_frame = target_frame
 
         while current_frame != source_frame:
             parent_frame, _ = parents[current_frame]
-            path_frame_ids.append(parent_frame)
+            frame_ids.append(parent_frame)
             current_frame = parent_frame
 
-        path_frame_ids.reverse()
+        frame_ids.reverse()
 
         return CovariancePath(
-            frame_ids=path_frame_ids,
+            frame_ids=frame_ids,
             covariance=best_covariances[target_frame],
             cost=best_costs[target_frame],
         )
