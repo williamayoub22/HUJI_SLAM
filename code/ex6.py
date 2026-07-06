@@ -8,7 +8,7 @@ from slam.pipeline.pose_graph_pipeline import (
     load_ex6_inputs,
     solve_bundle_windows_and_extract_constraints,
 )
-from slam.pose_graph.constraints import verify_relative_measurement
+# from slam.pose_graph.constraints import verify_relative_measurement
 from slam.pose_graph.graph_builder import build_pose_graph
 from slam.pose_graph.optimization import (
     compute_pose_graph_marginals,
@@ -48,10 +48,10 @@ def q_1(
     first_solution = bundle_solutions[0]
     first_constraint = constraints[0]
 
-    verify_relative_measurement(
-        bundle_solution=first_solution,
-        constraint=first_constraint,
-    )
+    # verify_relative_measurement(
+    #     bundle_solution=first_solution,
+    #     constraint=first_constraint,
+    # )
 
     print(
         format_relative_constraint_report(

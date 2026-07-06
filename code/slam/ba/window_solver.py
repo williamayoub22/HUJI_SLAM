@@ -51,7 +51,7 @@ def solve_all_bundle_windows(
 
         if verbose:
             print(
-                f"[5.4] Window {window_index}/{total_windows}: "
+                f"Window {window_index}/{total_windows}: "
                 f"{start_frame} -> {end_frame} "
                 f"({len(window_frames)} frames)...",
                 flush=True,
