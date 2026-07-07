@@ -21,8 +21,18 @@ from src.slam.pose_graph.optimization import optimize_pose_graph
 from pathlib import Path
 
 import cv2
+import gtsam
 import matplotlib.pyplot as plt
 from gtsam.symbol_shorthand import C
+
+from src.slam.config import SEQUENCE_DIR
+from src.slam.visualization.ex7_plots import (
+    plot_consensus_match,
+    plot_pose_graphs_versions,
+    plot_pose_graph_comparisons,
+    plot_absolute_location_error,
+    plot_location_uncertainty,
+)
 
 from src.slam.config import SEQUENCE_DIR
 
@@ -345,7 +355,7 @@ def _group_candidates_by_target(
 
     return candidates_by_target
 
-def q_1() -> dict[int, list[LoopClosureCandidate]]:
+def q_1():
     """
     Section 7.1: detect loop-closure candidates using an empirically
     calibrated Mahalanobis threshold.
@@ -488,7 +498,13 @@ def q_1() -> dict[int, list[LoopClosureCandidate]]:
             title_prefix="Best Mahalanobis loop-closure candidate",
         )
 
-    return candidates_by_target
+    return (
+        candidates_by_target,
+        build_result,
+        pose_graph_result,
+        world_to_camera_extrinsics,
+        keyframe_ids,
+    )
 
 def q_2(
     candidates_by_target: dict[int, list[LoopClosureCandidate]],
@@ -624,11 +640,157 @@ def q_3(
 
     return estimates
 
-def main() -> None:
-    candidates_by_target = q_1()
-    verified_results = q_2(candidates_by_target)
-    q_3(verified_results)
+def q_4(
+    graph: gtsam.NonlinearFactorGraph,
+    initial_estimates: gtsam.Values,
+    keyframe_ids: list[int],
+    estimates: list[RelativePoseEstimate],
+):
+    """
+    Section 7.4: Add the resulting measurement to the pose graph and optimize it to update the trajectory estimate.
+    We incrementally add loop closures and optimize to collect intermediate versions for q_5.
+    """
+    print("\n" + "=" * 60)
+    print("[7.4] Update the Pose Graph")
+    print("=" * 60)
+    
+    updated_graph = graph.clone()
+    current_estimates = initial_estimates
+    versions = []
+    
+    marginals_no_lc = gtsam.Marginals(updated_graph, current_estimates)
+    versions.append(("Optimized Without LC", current_estimates, marginals_no_lc))
+    
+    for idx, estimate in enumerate(estimates):
+        source_key = C(estimate.consensus_result.candidate.source_frame)
+        target_key = C(estimate.consensus_result.candidate.target_frame)
+        
+        noise_model = gtsam.noiseModel.Gaussian.Covariance(estimate.covariance)
+        robust_noise = gtsam.noiseModel.Robust.Create(
+            gtsam.noiseModel.mEstimator.Huber.Create(1.345),
+            noise_model
+        )
+        
+        factor = gtsam.BetweenFactorPose3(
+            source_key,
+            target_key,
+            estimate.relative_pose,
+            robust_noise
+        )
+        updated_graph.add(factor)
+        
+        if idx == 0 and len(estimates) > 1:
+            temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
+            current_estimates = temp_result.optimized_estimates
+            temp_marginals = gtsam.Marginals(updated_graph, current_estimates)
+            versions.append((f"Optimized with {idx+1} LC", current_estimates, temp_marginals))
+        elif idx == len(estimates) // 2 and len(versions) < 3 and len(estimates) > 2:
+            temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
+            current_estimates = temp_result.optimized_estimates
+            temp_marginals = gtsam.Marginals(updated_graph, current_estimates)
+            versions.append((f"Optimized with {idx+1} LCs", current_estimates, temp_marginals))
 
+    final_result = optimize_pose_graph(
+        graph=updated_graph,
+        initial_estimates=current_estimates,
+        keyframe_ids=keyframe_ids,
+    )
+    
+    final_marginals = gtsam.Marginals(updated_graph, final_result.optimized_estimates)
+    versions.append(("Optimized with All LCs", final_result.optimized_estimates, final_marginals))
+    
+    while len(versions) < 4:
+        versions.append(versions[-1])
+        
+    return final_result, versions[:4]
+
+
+def q_5(
+    verified_results: list[ConsensusMatchResult],
+    pose_graph_result,
+    updated_pose_graph_result,
+    versions,
+    world_to_camera_extrinsics,
+    keyframe_ids,
+):
+    print("\n" + "=" * 60)
+    print("[7.5] Plotting and Questions")
+    print("=" * 60)
+    
+    num_successful = sum(1 for r in verified_results if r.success)
+    print(f"Number of successful loop closures detected: {num_successful}")
+    
+    from src.slam.config import EX7_OUTPUT_DIR, GT_POSES_PATH
+    import numpy as np
+    
+    EX7_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = EX7_OUTPUT_DIR
+    
+    if num_successful > 0:
+        successful = [r for r in verified_results if r.success]
+        plot_consensus_match(successful[0], output_dir / "consensus_match.png")
+        print("Generated consensus_match.png")
+        
+    plot_pose_graphs_versions(versions, keyframe_ids, output_dir / "pose_graph_versions.png")
+    print("Generated pose_graph_versions.png")
+    
+    gt_world_to_camera_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
+
+    plot_pose_graph_comparisons(
+        pose_graph_result.optimized_estimates,
+        updated_pose_graph_result.optimized_estimates,
+        gt_world_to_camera_extrinsics,
+        keyframe_ids,
+        output_dir / "pose_graph_comparison.png"
+    )
+    print("Generated pose_graph_comparison.png")
+    
+    plot_absolute_location_error(
+        pose_graph_result.optimized_estimates,
+        updated_pose_graph_result.optimized_estimates,
+        gt_world_to_camera_extrinsics,
+        keyframe_ids,
+        output_dir / "absolute_location_error.png"
+    )
+    print("Generated absolute_location_error.png")
+    
+    marginals_no_lc = versions[0][2]
+    marginals_lc = versions[-1][2]
+    
+    plot_location_uncertainty(
+        marginals_no_lc,
+        marginals_lc,
+        keyframe_ids,
+        output_dir / "location_uncertainty.png"
+    )
+    print("Generated location_uncertainty.png (Measure: det(Cov_translation))")
+
+def main() -> None:
+    (
+        candidates_by_target,
+        build_result,
+        pose_graph_result,
+        world_to_camera_extrinsics,
+        keyframe_ids,
+    ) = q_1()
+    verified_results = q_2(candidates_by_target)
+    estimates = q_3(verified_results)
+    
+    updated_pose_graph_result, versions = q_4(
+        graph=build_result.graph,
+        initial_estimates=pose_graph_result.optimized_estimates,
+        keyframe_ids=keyframe_ids,
+        estimates=estimates,
+    )
+    
+    q_5(
+        verified_results=verified_results,
+        pose_graph_result=pose_graph_result,
+        updated_pose_graph_result=updated_pose_graph_result,
+        versions=versions,
+        world_to_camera_extrinsics=world_to_camera_extrinsics,
+        keyframe_ids=keyframe_ids,
+    )
 
 if __name__ == "__main__":
     main()

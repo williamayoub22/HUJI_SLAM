@@ -101,8 +101,12 @@ def build_pose_graph(
 
         # The factor models p(c_end | c_start). Its information matrix is the
         # Lambda_end,end block from the joint canonical representation.
-        noise_model = gtsam.noiseModel.Gaussian.Information(
+        base_noise_model = gtsam.noiseModel.Gaussian.Information(
             information,
+        )
+        noise_model = gtsam.noiseModel.Robust.Create(
+            gtsam.noiseModel.mEstimator.Huber.Create(1.345),
+            base_noise_model
         )
 
         graph.add(
