@@ -4,12 +4,10 @@ import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
 
-from src.slam.pose_graph.constraints import RelativePoseConstraint
+from src.slam.pose_graph.constraints import RelativePoseConstraint, symmetrize
 from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
 )
-
-from src.slam.pose_graph.constraints import symmetrize
 
 
 @dataclass
@@ -27,17 +25,14 @@ def build_pose_graph(
     first_pose: gtsam.Pose3,
     prior_sigma: float = 1e-6,
 ) -> PoseGraphBuildResult:
-    """
-    Build the pose graph from consecutive relative-pose constraints.
+    """Build the pose graph from consecutive relative-pose constraints.
 
     Each GTSAM BetweenFactor uses the conditional information matrix extracted
     from Bundle Adjustment. The covariance-routing graph retains the matching
     covariance matrix for later path-based relative-covariance estimation.
     """
     if not constraints:
-        raise ValueError(
-            "Cannot build a pose graph without relative constraints."
-        )
+        raise ValueError("Cannot build a pose graph without relative constraints.")
 
     constraints = sorted(
         constraints,
@@ -89,11 +84,9 @@ def build_pose_graph(
         # Use 1e-8 for rotation (tight) and 1e-4 for translation (flexible)
         # to prevent massive lever-arm uncertainty explosions.
         covariance += np.diag([1e-8, 1e-8, 1e-8, 1e-4, 1e-4, 1e-4])
-        
+
         information = np.linalg.inv(covariance)
-        information = 0.5 * (
-            information + information.T
-        )
+        information = 0.5 * (information + information.T)
 
         # The factor models p(c_end | c_start). Its information matrix is the
         # Lambda_end,end block from the joint canonical representation.
@@ -143,13 +136,12 @@ def build_pose_graph(
     )
 
 
-#DEBUG:
+# DEBUG:
 def validate_constraints(
     constraints: list[RelativePoseConstraint],
     initial_estimates: gtsam.Values,
 ) -> None:
-    """
-    Verify that each relative constraint, its covariance, and its information
+    """Verify that each relative constraint, its covariance, and its information
     matrix are mutually consistent with the initial pose chain.
     """
     print("\n" + "=" * 60)
@@ -162,9 +154,7 @@ def validate_constraints(
     max_cov_condition = 0.0
 
     for index, constraint in enumerate(constraints):
-        covariance = symmetrize(
-            np.asarray(constraint.covariance, dtype=float)
-        )
+        covariance = symmetrize(np.asarray(constraint.covariance, dtype=float))
         information = np.asarray(
             constraint.information,
             dtype=float,
@@ -173,14 +163,12 @@ def validate_constraints(
 
         if covariance.shape != (6, 6):
             raise ValueError(
-                f"Constraint {index}: covariance shape is {covariance.shape}, "
-                "expected (6, 6)."
+                f"Constraint {index}: covariance shape is {covariance.shape}, expected (6, 6)."
             )
 
         if information.shape != (6, 6):
             raise ValueError(
-                f"Constraint {index}: information shape is {information.shape}, "
-                "expected (6, 6)."
+                f"Constraint {index}: information shape is {information.shape}, expected (6, 6)."
             )
 
         if not np.all(np.isfinite(covariance)):
@@ -217,9 +205,7 @@ def validate_constraints(
         predicted_relative_pose = start_pose.between(end_pose)
 
         pose_residual = gtsam.Pose3.Logmap(
-            constraint.relative_pose.inverse().compose(
-                predicted_relative_pose
-            )
+            constraint.relative_pose.inverse().compose(predicted_relative_pose)
         )
         pose_residual_norm = float(np.linalg.norm(pose_residual))
 
@@ -232,8 +218,7 @@ def validate_constraints(
         max_cov_condition = max(max_cov_condition, condition_number)
 
         if index < 5:
-            print(f"\nConstraint {index}: "
-                  f"c_{constraint.start_frame} -> c_{constraint.end_frame}")
+            print(f"\nConstraint {index}: c_{constraint.start_frame} -> c_{constraint.end_frame}")
             print(f"  covariance std: {np.sqrt(np.diag(covariance))}")
             print(f"  covariance eig: {covariance_eigenvalues}")
             print(f"  covariance cond: {condition_number:.3e}")
@@ -245,4 +230,3 @@ def validate_constraints(
     print(f"  max initial pose residual:  {max_pose_residual:.3e}")
     print(f"  minimum covariance eigenvalue: {min_cov_eigenvalue:.3e}")
     print(f"  maximum covariance condition:   {max_cov_condition:.3e}")
-

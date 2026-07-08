@@ -2,7 +2,6 @@
 
 import gtsam
 import numpy as np
-
 from slam.ba.graph_builder import build_local_bundle_graph
 from slam.ba.results import BundleAdjustmentResult
 from slam.tracking_database import TrackingDB

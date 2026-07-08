@@ -4,7 +4,6 @@ import gtsam
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Ellipse
-
 from slam.ba.gtsam_utils import (
     pose3_from_world_to_camera_extrinsic,
 )

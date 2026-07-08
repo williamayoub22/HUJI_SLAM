@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 import gtsam
 from gtsam.symbol_shorthand import C, Q
-
 from slam.ba.gtsam_utils import (
     stereo_image_distances,
     stereo_point_from_triplet,

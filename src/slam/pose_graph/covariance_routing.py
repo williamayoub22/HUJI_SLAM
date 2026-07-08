@@ -1,20 +1,16 @@
 from __future__ import annotations
-from __future__ import annotations
 
 import heapq
 import itertools
 from collections import defaultdict
 from dataclasses import dataclass
-from gtsam.symbol_shorthand import C
-import gtsam
-import numpy as np
 
+import numpy as np
 from slam.pose_graph.constraints import symmetrize
 
 
 def covariance_volume(covariance: np.ndarray) -> float:
-    """
-    Return the uncertainty-volume score det(Sigma).
+    """Return the uncertainty-volume score det(Sigma).
 
     For a Gaussian covariance ellipsoid, this is proportional to its volume sqrt(det(Sigma)).
     """
@@ -59,8 +55,7 @@ class CovariancePath:
 
 
 class CovarianceGraph:
-    """
-    Directed graph for the covariance-valued shortest-path approximation.
+    """Directed graph for the covariance-valued shortest-path approximation.
 
     Each edge u -> v stores the 6x6 covariance of the relative measurement.
     Matrix addition accumulates path covariances. Paths are ranked by det(accumulated covariance).
@@ -94,8 +89,7 @@ class CovarianceGraph:
         source_frame: int,
         target_frame: int,
     ) -> CovariancePath | None:
-        """
-        Return the path with minimum accumulated covariance volume.
+        """Return the path with minimum accumulated covariance volume.
 
         For a candidate extension u -> v:
             Sigma_candidate = Sigma[u] + Sigma_uv
@@ -189,29 +183,23 @@ def mahalanobis_squared(
     delta: np.ndarray,
     covariance: np.ndarray,
 ) -> float:
-    """
-    Compute delta^T Sigma^{-1} delta without explicitly inverting Sigma.
+    """Compute delta^T Sigma^{-1} delta without explicitly inverting Sigma.
     """
     delta = np.asarray(delta, dtype=float).reshape(-1)
     covariance = symmetrize(covariance)
 
     if delta.shape != (6,):
-        raise ValueError(
-            f"Expected a 6D pose perturbation, got shape {delta.shape}."
-        )
+        raise ValueError(f"Expected a 6D pose perturbation, got shape {delta.shape}.")
 
     try:
         value = float(delta @ np.linalg.solve(covariance, delta))
     except np.linalg.LinAlgError as error:
-        raise ValueError(
-            "Cannot compute Mahalanobis distance: covariance is singular."
-        ) from error
+        raise ValueError("Cannot compute Mahalanobis distance: covariance is singular.") from error
 
     # Small negative values can appear from numerical error.
     if value < -1e-10:
         raise ValueError(
-            f"Mahalanobis distance is negative ({value}); "
-            "check the covariance matrix."
+            f"Mahalanobis distance is negative ({value}); check the covariance matrix."
         )
 
     return max(value, 0.0)

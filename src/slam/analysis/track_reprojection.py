@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-
 from slam.ba.gtsam_utils import (
     pose3_from_world_to_camera_extrinsic,
     stereo_point_from_triplet,

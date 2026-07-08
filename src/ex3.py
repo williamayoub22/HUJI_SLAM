@@ -3,7 +3,6 @@ from pathlib import Path
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-
 from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES, FeatureType
 from slam.geometry.correspondences import find_common_points
 from slam.geometry.pnp import solve_pnp_safe

@@ -1,5 +1,5 @@
 import time
-import numpy as np
+
 import gtsam
 
 from src.slam.pose_graph.results import PoseGraphResult

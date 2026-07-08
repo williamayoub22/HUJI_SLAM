@@ -2,7 +2,6 @@ from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-
 from slam.geometry.triangulation import triangulate_dlt, triangulate_opencv
 from slam.io.calibration import read_stereo_calibration
 from slam.pipeline.stereo_pipeline import (

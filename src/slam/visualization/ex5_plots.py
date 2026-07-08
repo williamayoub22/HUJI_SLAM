@@ -4,7 +4,6 @@ import cv2
 import gtsam
 import matplotlib.pyplot as plt
 import numpy as np
-
 from slam.analysis.bundle_diagnostics import LargestFactorDiagnostic
 
 

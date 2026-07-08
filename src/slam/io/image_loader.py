@@ -4,7 +4,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-
 from slam.config import LEFT_IMAGES_DIR, RIGHT_IMAGES_DIR
 from slam.features.detectors import FeatureType
 from slam.features.matching import extract_and_match_features

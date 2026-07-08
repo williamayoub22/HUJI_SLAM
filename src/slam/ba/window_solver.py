@@ -4,7 +4,6 @@ from time import perf_counter
 
 import gtsam
 import numpy as np
-
 from slam.tracking_database import TrackingDB
 
 from .optimization import optimize_bundle_window

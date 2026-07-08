@@ -3,7 +3,6 @@
 import cv2
 import numpy as np
 from gtsam.symbol_shorthand import C
-
 from slam.analysis.bundle_diagnostics import analyze_largest_initial_projection_factor
 from slam.analysis.track_reprojection import analyze_track_reprojection
 from slam.ba.gtsam_utils import make_gtsam_stereo_calibration

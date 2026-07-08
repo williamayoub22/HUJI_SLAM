@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
-
 from slam.ba.results import BundleWindowSolution
 
 
@@ -36,7 +35,7 @@ def conditional_information_from_joint_information(
             f"variables, got {joint_information.shape}."
         )
 
-    joint_information = symmetrize(joint_information) # todo: needed?
+    joint_information = symmetrize(joint_information)  # todo: needed?
     information = joint_information[:6, :6]
     return symmetrize(information)
 
@@ -48,9 +47,7 @@ def covariance_from_information(
     information = np.asarray(information, dtype=float)
 
     if information.shape != (6, 6):
-        raise ValueError(
-            f"Expected a 6x6 information matrix, got {information.shape}."
-        )
+        raise ValueError(f"Expected a 6x6 information matrix, got {information.shape}.")
 
     covariance = np.linalg.inv(information)
     return symmetrize(covariance)
@@ -59,8 +56,7 @@ def covariance_from_information(
 def extract_relative_pose_constraint(
     solution: BundleWindowSolution,
 ) -> RelativePoseConstraint:
-    """
-    Extract the relative-pose factor between the first and last keyframes
+    """Extract the relative-pose factor between the first and last keyframes
     of one optimized BA window.
 
     The factor models p(c_end | c_start), so we query the joint information
@@ -88,9 +84,7 @@ def extract_relative_pose_constraint(
 
     joint_information = marginals.jointMarginalInformation(keys).fullMatrix()
 
-    information = conditional_information_from_joint_information(
-        joint_information
-    )
+    information = conditional_information_from_joint_information(joint_information)
     covariance = covariance_from_information(information)
 
     return RelativePoseConstraint(

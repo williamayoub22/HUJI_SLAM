@@ -35,10 +35,9 @@ def solve_bundle_windows_and_extract_constraints(
     db,
     world_to_camera_extrinsics,
     calibration,
-    keyframe_step: int = 10,
     verbose: bool = True,
 ):
-    """Solves all local BA windows and converts each optimized window into
+    """Solve local BA windows and convert each optimized window into
     one relative keyframe constraint for the pose graph.
     """
     keyframes = choose_keyframes_by_motion(poses=world_to_camera_extrinsics)

@@ -3,7 +3,6 @@
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-
 from slam.tracking_database import TrackingDB
 
 from ..geometry.transforms import relative_world_to_camera_extrinsic

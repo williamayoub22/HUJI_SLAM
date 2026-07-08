@@ -1,13 +1,16 @@
+from pathlib import Path
+
+import cv2
+import gtsam
+import matplotlib.pyplot as plt
 import numpy as np
+from gtsam.symbol_shorthand import C
 
 from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
-from src.slam.pipeline.pose_graph_pipeline import (
-    load_ex6_inputs,
-    solve_bundle_windows_and_extract_constraints,
-)
+from src.slam.config import SEQUENCE_DIR
 from src.slam.loop_closure.candidate_detection import (
-    ConsensusMatchResult,
     ConsensusMatcher,
+    ConsensusMatchResult,
     LoopClosureCandidate,
     RelativePoseEstimate,
     detect_candidates_for_keyframe,
@@ -15,31 +18,23 @@ from src.slam.loop_closure.candidate_detection import (
     score_candidates_for_keyframe,
     select_spread_loop_closures,
 )
+from src.slam.pipeline.pose_graph_pipeline import (
+    load_ex6_inputs,
+    solve_bundle_windows_and_extract_constraints,
+)
 from src.slam.pose_graph.graph_builder import build_pose_graph
 from src.slam.pose_graph.optimization import optimize_pose_graph
-
-from pathlib import Path
-
-import cv2
-import gtsam
-import matplotlib.pyplot as plt
-from gtsam.symbol_shorthand import C
-
-from src.slam.config import SEQUENCE_DIR
 from src.slam.visualization.ex7_plots import (
-    plot_consensus_match,
-    plot_pose_graphs_versions,
-    plot_pose_graph_comparisons,
     plot_absolute_location_error,
+    plot_consensus_match,
     plot_location_uncertainty,
+    plot_pose_graph_comparisons,
+    plot_pose_graphs_versions,
 )
-
-from src.slam.config import SEQUENCE_DIR
-
-
 
 MAHALANOBIS_THRESHOLD = 52720.3
 NUM_LOOP_CLOSURE_REPRESENTATIVES = 10
+
 
 def _is_geometrically_close(
     candidate,
@@ -53,10 +48,7 @@ def _is_geometrically_close(
     translation_m = float(np.linalg.norm(delta[3:]))
     rotation_deg = float(np.degrees(np.linalg.norm(delta[:3])))
 
-    return (
-        translation_m <= max_translation_m
-        and rotation_deg <= max_rotation_deg
-    )
+    return translation_m <= max_translation_m and rotation_deg <= max_rotation_deg
 
 
 def _print_mahalanobis_threshold_sweep(
@@ -65,8 +57,7 @@ def _print_mahalanobis_threshold_sweep(
     max_translation_m: float = 5.0,
     max_rotation_deg: float = 20.0,
 ) -> float:
-    """
-    Pick a Mahalanobis threshold empirically.
+    """Pick a Mahalanobis threshold empirically.
 
     'Close' is used only as an offline proxy for a potential visual overlap.
     The actual algorithm later uses only the Mahalanobis threshold followed
@@ -113,8 +104,7 @@ def _print_mahalanobis_threshold_sweep(
     print(f"Geometrically close pairs:     {len(close_candidates)}")
     print()
     print(
-        f"{'threshold':>15} | {'close recall':>12} | "
-        f"{'selected':>10} | {'selected / target':>18}"
+        f"{'threshold':>15} | {'close recall':>12} | {'selected':>10} | {'selected / target':>18}"
     )
     print("-" * 67)
 
@@ -124,9 +114,7 @@ def _print_mahalanobis_threshold_sweep(
         threshold = float(np.percentile(close_scores, percentile))
 
         selected = [
-            candidate
-            for candidate in all_candidates
-            if candidate.mahalanobis_squared <= threshold
+            candidate for candidate in all_candidates if candidate.mahalanobis_squared <= threshold
         ]
 
         selected_close = [
@@ -141,14 +129,10 @@ def _print_mahalanobis_threshold_sweep(
 
         recall = len(selected_close) / len(close_candidates)
 
-        targets_with_selected = len(
-            {candidate.target_frame for candidate in selected}
-        )
+        targets_with_selected = len({candidate.target_frame for candidate in selected})
 
         selected_per_target = (
-            len(selected) / targets_with_selected
-            if targets_with_selected > 0
-            else 0.0
+            len(selected) / targets_with_selected if targets_with_selected > 0 else 0.0
         )
 
         print(
@@ -170,15 +154,13 @@ def _print_mahalanobis_threshold_sweep(
 
     return chosen_threshold
 
+
 def _closest_spatial_candidate(candidates_by_target: dict[int, list]):
-    """
-    Return the temporally nonlocal candidate with the smallest Euclidean
+    """Return the temporally nonlocal candidate with the smallest Euclidean
     relative translation, regardless of Mahalanobis score.
     """
     all_candidates = [
-        candidate
-        for candidates in candidates_by_target.values()
-        for candidate in candidates
+        candidate for candidates in candidates_by_target.values() for candidate in candidates
     ]
 
     if not all_candidates:
@@ -191,8 +173,7 @@ def _closest_spatial_candidate(candidates_by_target: dict[int, list]):
 
 
 def _load_left_image(frame_id: int) -> np.ndarray:
-    """
-    Load KITTI sequence-00 left image for a raw frame index.
+    """Load KITTI sequence-00 left image for a raw frame index.
 
     Adjust image_0 if your project uses another left-image directory.
     """
@@ -223,10 +204,7 @@ def _show_candidate_pair(
     target_position = optimized_values.atPose3(C(target_frame)).translation()
 
     positions = np.asarray(
-        [
-            optimized_values.atPose3(C(frame_id)).translation()
-            for frame_id in keyframe_ids
-        ],
+        [optimized_values.atPose3(C(frame_id)).translation() for frame_id in keyframe_ids],
         dtype=float,
     )
 
@@ -273,10 +251,7 @@ def _show_candidate_pair(
         linestyle="--",
     )
 
-    axes[2].set_title(
-        "Optimized trajectory\n"
-        f"{translation_m:.2f} m, {rotation_deg:.2f}°"
-    )
+    axes[2].set_title(f"Optimized trajectory\n{translation_m:.2f} m, {rotation_deg:.2f}°")
     axes[2].set_xlabel("x [m]")
     axes[2].set_ylabel("z [m]")
     axes[2].axis("equal")
@@ -288,8 +263,7 @@ def _show_candidate_pair(
 
 
 def _print_candidate_debug(candidate) -> None:
-    """
-    Print the relative motion, accumulated path uncertainty, and rough
+    """Print the relative motion, accumulated path uncertainty, and rough
     per-coordinate Mahalanobis contributions for one candidate.
     """
     delta = np.asarray(candidate.relative_delta, dtype=float)
@@ -310,31 +284,16 @@ def _print_candidate_debug(candidate) -> None:
 
     covariance_eigenvalues = np.linalg.eigvalsh(covariance)
 
-    print(
-        f"\n    c_{candidate.source_frame} -> "
-        f"c_{candidate.target_frame}"
-    )
+    print(f"\n    c_{candidate.source_frame} -> c_{candidate.target_frame}")
     print(f"      d^2:                {candidate.mahalanobis_squared:.3f}")
     print(f"      path edges:         {len(candidate.path_frame_ids) - 1}")
     print(f"      path:               {candidate.path_frame_ids}")
     print(f"      rotation magnitude: {rotation_magnitude_deg:.3f} deg")
     print(f"      translation norm:   {translation_magnitude:.3f} m")
-    print(
-        "      delta [rad, m]:     "
-        f"{np.array2string(delta, precision=6)}"
-    )
-    print(
-        "      path std [rad, m]:  "
-        f"{np.array2string(standard_deviations, precision=6)}"
-    )
-    print(
-        "      cov eig:            "
-        f"{np.array2string(covariance_eigenvalues, precision=3)}"
-    )
-    print(
-        "      rough d^2 terms:    "
-        f"{np.array2string(diagonal_contributions, precision=1)}"
-    )
+    print(f"      delta [rad, m]:     {np.array2string(delta, precision=6)}")
+    print(f"      path std [rad, m]:  {np.array2string(standard_deviations, precision=6)}")
+    print(f"      cov eig:            {np.array2string(covariance_eigenvalues, precision=3)}")
+    print(f"      rough d^2 terms:    {np.array2string(diagonal_contributions, precision=1)}")
 
 
 def _group_candidates_by_target(
@@ -350,15 +309,13 @@ def _group_candidates_by_target(
         ).append(candidate)
 
     for target_candidates in candidates_by_target.values():
-        target_candidates.sort(
-            key=lambda candidate: candidate.mahalanobis_squared
-        )
+        target_candidates.sort(key=lambda candidate: candidate.mahalanobis_squared)
 
     return candidates_by_target
 
+
 def q_1():
-    """
-    Section 7.1: detect loop-closure candidates using an empirically
+    """Section 7.1: detect loop-closure candidates using an empirically
     calibrated Mahalanobis threshold.
 
     The threshold was selected offline as the smallest value that retained
@@ -374,7 +331,6 @@ def q_1():
         db=db,
         world_to_camera_extrinsics=world_to_camera_extrinsics,
         calibration=calibration,
-        keyframe_step=keyframe_step,
         verbose=True,
     )
 
@@ -382,9 +338,7 @@ def q_1():
         raise RuntimeError("No relative-pose constraints were extracted.")
 
     first_frame = constraints[0].start_frame
-    first_pose = pose3_from_world_to_camera_extrinsic(
-        world_to_camera_extrinsics[first_frame]
-    )
+    first_pose = pose3_from_world_to_camera_extrinsic(world_to_camera_extrinsics[first_frame])
 
     print("Building graph...")
     build_result = build_pose_graph(
@@ -428,20 +382,14 @@ def q_1():
     print("\n" + "=" * 60)
     print("[7.1] Mahalanobis Loop-Closure Candidate Detection")
     print("=" * 60)
+    print("Keyframe selection:           motion-based")
     print(f"Keyframes tested:             {len(keyframe_ids)}")
-    print(f"Keyframe interval:            {keyframe_step} frames")
     print(f"Minimum temporal separation:  {min_keyframe_separation}")
     print(f"Mahalanobis threshold:        {MAHALANOBIS_THRESHOLD:.1f}")
     print(
         "Threshold rationale:          smallest empirical threshold "
         "with at least 90% proxy-close-pair recall"
     )
-
-    if len(keyframe_ids) != 310:
-        print(
-            "Warning: expected 310 keyframes according to the exercise, "
-            f"but built a graph with {len(keyframe_ids)}."
-        )
 
     # Actual candidate-generation stage.
     candidates_by_target: dict[int, list[LoopClosureCandidate]] = {}
@@ -461,9 +409,7 @@ def q_1():
             candidates_by_target[target_frame] = candidates
             accepted_candidates.extend(candidates)
 
-    accepted_candidates.sort(
-        key=lambda candidate: candidate.mahalanobis_squared
-    )
+    accepted_candidates.sort(key=lambda candidate: candidate.mahalanobis_squared)
 
     print(f"Accepted candidate pairs:     {len(accepted_candidates)}")
     print(f"Targets with candidates:      {len(candidates_by_target)}")
@@ -507,11 +453,11 @@ def q_1():
         keyframe_ids,
     )
 
+
 def q_2(
     candidates_by_target: dict[int, list[LoopClosureCandidate]],
 ) -> list[ConsensusMatchResult]:
-    """
-    Section 7.2: verify Mahalanobis-selected candidates using four-view
+    """Section 7.2: verify Mahalanobis-selected candidates using four-view
     PnP/RANSAC consensus matching.
     """
     min_loop_inliers = 20
@@ -559,11 +505,7 @@ def q_2(
         else:
             print(f"  Result: rejected — {result.failure_reason}")
 
-    successful_results = [
-        result
-        for result in results
-        if result.success
-    ]
+    successful_results = [result for result in results if result.success]
 
     print("\n" + "=" * 60)
     print("Consensus-matching summary")
@@ -587,8 +529,7 @@ def q_2(
 def q_3(
     verified_results: list[ConsensusMatchResult],
 ) -> list[RelativePoseEstimate]:
-    """
-    Section 7.3: refine selected consensus matches using two-frame stereo BA
+    """Section 7.3: refine selected consensus matches using two-frame stereo BA
     and extract a relative-pose covariance for each loop constraint.
     """
     representatives = select_spread_loop_closures(
@@ -627,19 +568,13 @@ def q_3(
 
         print(f"  Inlier landmarks:       {estimate.num_landmarks}")
         print(
-            f"  BA error:               "
-            f"{estimate.initial_error:.2f} -> {estimate.final_error:.2f}"
+            f"  BA error:               {estimate.initial_error:.2f} -> {estimate.final_error:.2f}"
         )
-        print(
-            "  Relative-pose std:       "
-            f"{np.array2string(covariance_std, precision=5)}"
-        )
-        print(
-            f"  Covariance condition:    "
-            f"{np.linalg.cond(estimate.covariance):.2e}"
-        )
+        print(f"  Relative-pose std:       {np.array2string(covariance_std, precision=5)}")
+        print(f"  Covariance condition:    {np.linalg.cond(estimate.covariance):.2e}")
 
     return estimates
+
 
 def q_4(
     graph: gtsam.NonlinearFactorGraph,
@@ -647,64 +582,60 @@ def q_4(
     keyframe_ids: list[int],
     estimates: list[RelativePoseEstimate],
 ):
-    """
-    Section 7.4: Add the resulting measurement to the pose graph and optimize it to update the trajectory estimate.
+    """Section 7.4: Add the resulting measurement to the pose graph and optimize it to update the trajectory estimate.
     We incrementally add loop closures and optimize to collect intermediate versions for q_5.
     """
     print("\n" + "=" * 60)
     print("[7.4] Update the Pose Graph")
     print("=" * 60)
-    
+
     updated_graph = graph.clone()
     current_estimates = initial_estimates
     versions = []
-    
+
     # 1. Use the original, unmutated graph for the 'Without LC' marginals
     marginals_no_lc = gtsam.Marginals(graph, current_estimates)
     versions.append(("Optimized Without LC", current_estimates, marginals_no_lc))
-    
+
     for idx, estimate in enumerate(estimates):
         source_key = C(estimate.consensus_result.candidate.source_frame)
         target_key = C(estimate.consensus_result.candidate.target_frame)
-        
+
         # 1. Use the EXACT covariance from the refinement. Do NOT inflate it.
         # This gives the loop closure the mathematical weight needed to bend the graph.
         noise_model = gtsam.noiseModel.Gaussian.Covariance(estimate.covariance)
-        
+
         factor = gtsam.BetweenFactorPose3(
-            source_key,
-            target_key,
-            estimate.relative_pose,
-            noise_model
+            source_key, target_key, estimate.relative_pose, noise_model
         )
         updated_graph.add(factor)
-        
+
         if idx == 0 and len(estimates) > 1:
             temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
             current_estimates = temp_result.optimized_estimates
             # Freeze the graph state for this marginal by cloning it
             temp_marginals = gtsam.Marginals(updated_graph.clone(), current_estimates)
-            versions.append((f"Optimized with {idx+1} LC", current_estimates, temp_marginals))
+            versions.append((f"Optimized with {idx + 1} LC", current_estimates, temp_marginals))
         elif idx == len(estimates) // 2 and len(versions) < 3 and len(estimates) > 2:
             temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
             current_estimates = temp_result.optimized_estimates
             # Freeze the graph state for this marginal by cloning it
             temp_marginals = gtsam.Marginals(updated_graph.clone(), current_estimates)
-            versions.append((f"Optimized with {idx+1} LCs", current_estimates, temp_marginals))
+            versions.append((f"Optimized with {idx + 1} LCs", current_estimates, temp_marginals))
 
     final_result = optimize_pose_graph(
         graph=updated_graph,
         initial_estimates=current_estimates,
         keyframe_ids=keyframe_ids,
     )
-    
+
     # Freeze the final graph state
     final_marginals = gtsam.Marginals(updated_graph.clone(), final_result.optimized_estimates)
     versions.append(("Optimized with All LCs", final_result.optimized_estimates, final_marginals))
-    
+
     while len(versions) < 4:
         versions.append(versions[-1])
-        
+
     return final_result, versions[:4]
 
 
@@ -719,24 +650,25 @@ def q_5(
     print("\n" + "=" * 60)
     print("[7.5] Plotting and Questions")
     print("=" * 60)
-    
+
     num_successful = sum(1 for r in verified_results if r.success)
     print(f"Number of successful loop closures detected: {num_successful}")
-    
-    from src.slam.config import EX7_OUTPUT_DIR, GT_POSES_PATH
+
     import numpy as np
-    
+
+    from src.slam.config import EX7_OUTPUT_DIR, GT_POSES_PATH
+
     EX7_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_dir = EX7_OUTPUT_DIR
-    
+
     if num_successful > 0:
         successful = [r for r in verified_results if r.success]
         plot_consensus_match(successful[0], output_dir / "consensus_match.png")
         print("Generated consensus_match.png")
-        
+
     plot_pose_graphs_versions(versions, keyframe_ids, output_dir / "pose_graph_versions.png")
     print("Generated pose_graph_versions.png")
-    
+
     gt_world_to_camera_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
 
     plot_pose_graph_comparisons(
@@ -744,29 +676,27 @@ def q_5(
         updated_pose_graph_result.optimized_estimates,
         gt_world_to_camera_extrinsics,
         keyframe_ids,
-        output_dir / "pose_graph_comparison.png"
+        output_dir / "pose_graph_comparison.png",
     )
     print("Generated pose_graph_comparison.png")
-    
+
     plot_absolute_location_error(
         pose_graph_result.optimized_estimates,
         updated_pose_graph_result.optimized_estimates,
         gt_world_to_camera_extrinsics,
         keyframe_ids,
-        output_dir / "absolute_location_error.png"
+        output_dir / "absolute_location_error.png",
     )
     print("Generated absolute_location_error.png")
-    
+
     marginals_no_lc = versions[0][2]
     marginals_lc = versions[-1][2]
-    
+
     plot_location_uncertainty(
-        marginals_no_lc,
-        marginals_lc,
-        keyframe_ids,
-        output_dir / "location_uncertainty.png"
+        marginals_no_lc, marginals_lc, keyframe_ids, output_dir / "location_uncertainty.png"
     )
     print("Generated location_uncertainty.png (Measure: det(Cov_translation))")
+
 
 def main() -> None:
     (
@@ -778,14 +708,14 @@ def main() -> None:
     ) = q_1()
     verified_results = q_2(candidates_by_target)
     estimates = q_3(verified_results)
-    
+
     updated_pose_graph_result, versions = q_4(
         graph=build_result.graph,
         initial_estimates=pose_graph_result.optimized_estimates,
         keyframe_ids=keyframe_ids,
         estimates=estimates,
     )
-    
+
     q_5(
         verified_results=verified_results,
         pose_graph_result=pose_graph_result,
@@ -794,6 +724,7 @@ def main() -> None:
         world_to_camera_extrinsics=world_to_camera_extrinsics,
         keyframe_ids=keyframe_ids,
     )
+
 
 if __name__ == "__main__":
     main()

@@ -7,18 +7,16 @@ import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
 
-from src.slam.pose_graph.covariance_routing import (
-    CovarianceGraph,
-    mahalanobis_squared,
-)
-import cv2
-import gtsam
-
 from src.slam.ba.gtsam_utils import (
     make_gtsam_stereo_calibration,
     pose3_from_world_to_camera_extrinsic,
 )
 from src.slam.pose_graph.constraints import symmetrize
+from src.slam.pose_graph.covariance_routing import (
+    CovarianceGraph,
+    mahalanobis_squared,
+)
+
 
 @dataclass(frozen=True)
 class LoopClosureCandidate:
@@ -34,8 +32,7 @@ class LoopClosureCandidate:
 
 
 def t2v(relative_pose: gtsam.Pose3) -> np.ndarray:
-    """
-    Return the 6D local coordinates of a relative Pose3 around identity.
+    """Return the 6D local coordinates of a relative Pose3 around identity.
 
     Ordering is GTSAM's Pose3 tangent convention:
         [rx, ry, rz, tx, ty, tz].
@@ -54,8 +51,7 @@ def score_candidates_for_keyframe(
     target_frame: int,
     min_keyframe_separation: int = 5,
 ) -> list[LoopClosureCandidate]:
-    """
-    Score every temporally nonlocal earlier keyframe.
+    """Score every temporally nonlocal earlier keyframe.
 
     No threshold is applied here. This is useful for empirical calibration
     of the Mahalanobis gate.
@@ -64,9 +60,7 @@ def score_candidates_for_keyframe(
         raise ValueError("keyframe_ids must not contain duplicates.")
 
     if target_frame not in keyframe_ids:
-        raise ValueError(
-            f"Target frame {target_frame} is not a pose-graph keyframe."
-        )
+        raise ValueError(f"Target frame {target_frame} is not a pose-graph keyframe.")
 
     if min_keyframe_separation < 1:
         raise ValueError("min_keyframe_separation must be at least 1.")
@@ -79,9 +73,7 @@ def score_candidates_for_keyframe(
 
     target_key = C(target_frame)
     if not optimized_values.exists(target_key):
-        raise ValueError(
-            f"Missing optimized pose for target frame {target_frame}."
-        )
+        raise ValueError(f"Missing optimized pose for target frame {target_frame}.")
 
     target_pose = optimized_values.atPose3(target_key)
     candidates: list[LoopClosureCandidate] = []
@@ -90,9 +82,7 @@ def score_candidates_for_keyframe(
         source_key = C(source_frame)
 
         if not optimized_values.exists(source_key):
-            raise ValueError(
-                f"Missing optimized pose for source frame {source_frame}."
-            )
+            raise ValueError(f"Missing optimized pose for source frame {source_frame}.")
 
         covariance_path = covariance_graph.shortest_path(
             source_frame=source_frame,
@@ -138,8 +128,7 @@ def detect_candidates_for_keyframe(
     mahalanobis_threshold: float,
     max_candidates: int | None = None,
 ) -> list[LoopClosureCandidate]:
-    """
-    Return candidates whose empirical Mahalanobis score passes the gate.
+    """Return candidates whose empirical Mahalanobis score passes the gate.
     """
     if mahalanobis_threshold <= 0:
         raise ValueError("mahalanobis_threshold must be positive.")
@@ -166,6 +155,7 @@ def detect_candidates_for_keyframe(
 
     return accepted
 
+
 def suppress_nearby_candidate_pairs(
     candidates: list[LoopClosureCandidate],
     *,
@@ -173,16 +163,12 @@ def suppress_nearby_candidate_pairs(
     source_radius: int = 2,
     target_radius: int = 2,
 ) -> list[LoopClosureCandidate]:
-    """
-    Keep the lowest-Mahalanobis representative from each local region.
+    """Keep the lowest-Mahalanobis representative from each local region.
 
     source_radius and target_radius are measured in keyframe-list positions,
     not raw frame numbers.
     """
-    keyframe_index = {
-        frame_id: index
-        for index, frame_id in enumerate(keyframe_ids)
-    }
+    keyframe_index = {frame_id: index for index, frame_id in enumerate(keyframe_ids)}
 
     selected: list[LoopClosureCandidate] = []
 
@@ -194,10 +180,8 @@ def suppress_nearby_candidate_pairs(
         target_index = keyframe_index[candidate.target_frame]
 
         overlaps_existing = any(
-            abs(source_index - keyframe_index[chosen.source_frame])
-            <= source_radius
-            and abs(target_index - keyframe_index[chosen.target_frame])
-            <= target_radius
+            abs(source_index - keyframe_index[chosen.source_frame]) <= source_radius
+            and abs(target_index - keyframe_index[chosen.target_frame]) <= target_radius
             for chosen in selected
         )
 
@@ -217,7 +201,6 @@ from src.slam.pipeline.stereo_pipeline import (
     create_stereo_point_cloud,
 )
 from src.slam.pipeline.temporal_pipeline import match_left_frames
-
 
 MIN_LOOP_FOUR_VIEW_MATCHES = 20
 MIN_LOOP_INLIERS = 20
@@ -246,8 +229,7 @@ class ConsensusMatchResult:
 
 
 class ConsensusMatcher:
-    """
-    Reuses the Exercise-3 stereo + temporal matching + PnP/RANSAC pipeline
+    """Reuses the Exercise-3 stereo + temporal matching + PnP/RANSAC pipeline
     for wide-baseline loop-closure verification.
 
     Stereo point clouds are cached because one keyframe can occur in more
@@ -284,8 +266,7 @@ class ConsensusMatcher:
         self,
         candidate: LoopClosureCandidate,
     ) -> ConsensusMatchResult:
-        """
-        Verify one candidate with the Exercise-3 four-view consensus pipeline.
+        """Verify one candidate with the Exercise-3 four-view consensus pipeline.
 
         The returned transformation maps 3D points represented in the source
         left-camera coordinates to the target left-camera coordinates.
@@ -378,10 +359,7 @@ class ConsensusMatcher:
                 source_to_target_transform=transform_ransac,
                 inlier_mask=inlier_mask,
                 success=False,
-                failure_reason=(
-                    f"Too few RANSAC inliers: "
-                    f"{num_inliers} < {self.min_loop_inliers}"
-                ),
+                failure_reason=(f"Too few RANSAC inliers: {num_inliers} < {self.min_loop_inliers}"),
             )
 
         transform_refined = solve_pnp_safe(
@@ -410,6 +388,7 @@ class ConsensusMatcher:
             target_right=right1,
         )
 
+
 STEREO_PIXEL_SIGMA = 1.0
 SOURCE_POSE_PRIOR_SIGMA = 1e-9
 
@@ -430,9 +409,8 @@ def _stereo_measurement(
     left_point: np.ndarray,
     right_point: np.ndarray,
 ) -> gtsam.StereoPoint2:
-    """
-    Convert rectified left/right image coordinates to GTSAM's stereo format:
-        (u_left, u_right, v).
+    """Convert rectified left/right image coordinates to GTSAM's stereo format:
+    (u_left, u_right, v).
     """
     return gtsam.StereoPoint2(
         float(left_point[0]),
@@ -446,17 +424,14 @@ def refine_relative_pose_with_bundle_adjustment(
     *,
     pixel_sigma: float = STEREO_PIXEL_SIGMA,
 ) -> RelativePoseEstimate:
-    """
-    Refine one verified loop closure with a two-frame stereo bundle adjustment.
+    """Refine one verified loop closure with a two-frame stereo bundle adjustment.
 
     The source camera is fixed as the local world frame. Therefore, the
     optimized target pose directly represents the source-to-target relative
     pose in camera-to-world Pose3 convention.
     """
     if not consensus_result.success:
-        raise ValueError(
-            "Bundle refinement requires a successful consensus match."
-        )
+        raise ValueError("Bundle refinement requires a successful consensus match.")
 
     if consensus_result.source_to_target_transform is None:
         raise ValueError("Missing PnP/RANSAC transform.")
@@ -474,9 +449,7 @@ def refine_relative_pose_with_bundle_adjustment(
             consensus_result.target_right,
         )
     ):
-        raise ValueError(
-            "Consensus result does not retain the four-view correspondences."
-        )
+        raise ValueError("Consensus result does not retain the four-view correspondences.")
 
     inlier_mask = np.asarray(
         consensus_result.inlier_mask,
@@ -586,9 +559,7 @@ def refine_relative_pose_with_bundle_adjustment(
     optimized_source_pose = optimized_values.atPose3(source_key)
     optimized_target_pose = optimized_values.atPose3(target_key)
 
-    relative_pose = optimized_source_pose.between(
-        optimized_target_pose
-    )
+    relative_pose = optimized_source_pose.between(optimized_target_pose)
 
     marginals = gtsam.Marginals(
         graph,
@@ -598,9 +569,7 @@ def refine_relative_pose_with_bundle_adjustment(
     # The source pose is effectively fixed, so target covariance is the
     # relative-pose covariance. This is the correct covariance for the
     # later BetweenFactorPose3 loop constraint.
-    covariance = symmetrize(
-        marginals.marginalCovariance(target_key)
-    )
+    covariance = symmetrize(marginals.marginalCovariance(target_key))
 
     eigenvalues = np.linalg.eigvalsh(covariance)
     if np.min(eigenvalues) <= 0:
@@ -618,24 +587,20 @@ def refine_relative_pose_with_bundle_adjustment(
         num_landmarks=len(points_3d),
     )
 
+
 def select_spread_loop_closures(
     verified_results: list[ConsensusMatchResult],
     *,
     num_representatives: int = 3,
 ) -> list[ConsensusMatchResult]:
-    """
-    Select temporally spread representatives from one loop-overlap band.
+    """Select temporally spread representatives from one loop-overlap band.
 
     This avoids adding many highly correlated factors from nearly consecutive
     keyframes. For three representatives, this returns one near the start,
     one near the middle, and one near the end of the matched overlap.
     """
     successful = sorted(
-        (
-            result
-            for result in verified_results
-            if result.success
-        ),
+        (result for result in verified_results if result.success),
         key=lambda result: result.candidate.target_frame,
     )
 
@@ -655,7 +620,4 @@ def select_spread_loop_closures(
         dtype=int,
     )
 
-    return [
-        successful[index]
-        for index in sorted(set(selected_indices))
-    ]
+    return [successful[index] for index in sorted(set(selected_indices))]
