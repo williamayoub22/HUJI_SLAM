@@ -22,8 +22,8 @@ def optimize_pose_graph(
     print(f"Initial error time: {time.perf_counter() - t0:.2f}s")
 
     params = gtsam.LevenbergMarquardtParams()
-    params.setMaxIterations(200)         # Increased to allow Huber to converge
-    params.setVerbosityLM("SUMMARY")     # Prints each LM iteration.
+    params.setMaxIterations(500)
+    params.setVerbosityLM("SUMMARY")
 
     optimizer = gtsam.LevenbergMarquardtOptimizer(
         graph,

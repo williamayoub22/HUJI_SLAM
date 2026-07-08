@@ -38,7 +38,8 @@ from src.slam.config import SEQUENCE_DIR
 
 
 
-MAHALANOBIS_THRESHOLD = 313_337.7
+MAHALANOBIS_THRESHOLD = 52720.3
+NUM_LOOP_CLOSURE_REPRESENTATIVES = 10
 
 def _is_geometrically_close(
     candidate,
@@ -592,7 +593,7 @@ def q_3(
     """
     representatives = select_spread_loop_closures(
         verified_results,
-        num_representatives=3,
+        num_representatives=NUM_LOOP_CLOSURE_REPRESENTATIVES,
     )
 
     print("\n" + "=" * 60)
@@ -658,36 +659,37 @@ def q_4(
     current_estimates = initial_estimates
     versions = []
     
-    marginals_no_lc = gtsam.Marginals(updated_graph, current_estimates)
+    # 1. Use the original, unmutated graph for the 'Without LC' marginals
+    marginals_no_lc = gtsam.Marginals(graph, current_estimates)
     versions.append(("Optimized Without LC", current_estimates, marginals_no_lc))
     
     for idx, estimate in enumerate(estimates):
         source_key = C(estimate.consensus_result.candidate.source_frame)
         target_key = C(estimate.consensus_result.candidate.target_frame)
         
+        # 1. Use the EXACT covariance from the refinement. Do NOT inflate it.
+        # This gives the loop closure the mathematical weight needed to bend the graph.
         noise_model = gtsam.noiseModel.Gaussian.Covariance(estimate.covariance)
-        robust_noise = gtsam.noiseModel.Robust.Create(
-            gtsam.noiseModel.mEstimator.Huber.Create(1.345),
-            noise_model
-        )
         
         factor = gtsam.BetweenFactorPose3(
             source_key,
             target_key,
             estimate.relative_pose,
-            robust_noise
+            noise_model
         )
         updated_graph.add(factor)
         
         if idx == 0 and len(estimates) > 1:
             temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
             current_estimates = temp_result.optimized_estimates
-            temp_marginals = gtsam.Marginals(updated_graph, current_estimates)
+            # Freeze the graph state for this marginal by cloning it
+            temp_marginals = gtsam.Marginals(updated_graph.clone(), current_estimates)
             versions.append((f"Optimized with {idx+1} LC", current_estimates, temp_marginals))
         elif idx == len(estimates) // 2 and len(versions) < 3 and len(estimates) > 2:
             temp_result = optimize_pose_graph(updated_graph, current_estimates, keyframe_ids)
             current_estimates = temp_result.optimized_estimates
-            temp_marginals = gtsam.Marginals(updated_graph, current_estimates)
+            # Freeze the graph state for this marginal by cloning it
+            temp_marginals = gtsam.Marginals(updated_graph.clone(), current_estimates)
             versions.append((f"Optimized with {idx+1} LCs", current_estimates, temp_marginals))
 
     final_result = optimize_pose_graph(
@@ -696,7 +698,8 @@ def q_4(
         keyframe_ids=keyframe_ids,
     )
     
-    final_marginals = gtsam.Marginals(updated_graph, final_result.optimized_estimates)
+    # Freeze the final graph state
+    final_marginals = gtsam.Marginals(updated_graph.clone(), final_result.optimized_estimates)
     versions.append(("Optimized with All LCs", final_result.optimized_estimates, final_marginals))
     
     while len(versions) < 4:

@@ -84,29 +84,21 @@ def build_pose_graph(
         covariance = symmetrize(
             constraint.covariance,
         )
-        information = np.asarray(
-            constraint.information,
-            dtype=float,
-        )
-
-        if information.shape != (6, 6):
-            raise ValueError(
-                "Expected a 6x6 conditional information matrix, got "
-                f"{information.shape}."
-            )
-
+        # [FIX] The "Titanium" Odometry
+        # Inject a minimum uncertainty "floor" into the odometry constraints.
+        # Use 1e-8 for rotation (tight) and 1e-4 for translation (flexible)
+        # to prevent massive lever-arm uncertainty explosions.
+        covariance += np.diag([1e-8, 1e-8, 1e-8, 1e-4, 1e-4, 1e-4])
+        
+        information = np.linalg.inv(covariance)
         information = 0.5 * (
             information + information.T
         )
 
         # The factor models p(c_end | c_start). Its information matrix is the
         # Lambda_end,end block from the joint canonical representation.
-        base_noise_model = gtsam.noiseModel.Gaussian.Information(
+        noise_model = gtsam.noiseModel.Gaussian.Information(
             information,
-        )
-        noise_model = gtsam.noiseModel.Robust.Create(
-            gtsam.noiseModel.mEstimator.Huber.Create(1.345),
-            base_noise_model
         )
 
         graph.add(
