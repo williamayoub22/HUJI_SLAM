@@ -2,7 +2,27 @@
 
 from collections.abc import Sequence
 
+import numpy as np
 from slam.tracking_database import TrackingDB
+
+from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
+
+# 1. Choose keyframes by motion:
+#    - min gap: 5
+#    - max gap: 18 or 20
+#    - translation threshold: around 2–3 m
+#    - rotation threshold: around 10–15 deg
+#
+# 2. Build local BA windows between adjacent keyframes.
+#
+# 3. Extract relative-pose constraints from BA.
+#
+# 4. Inflate covariance:
+#    Sigma = alpha * Sigma_BA + Sigma_floor
+#
+# 5. For loop-closure candidate detection, use the covariance graph with these inflated edges.
+#
+# 6. Calibrate Mahalanobis threshold empirically as you already did.
 
 
 def collect_window_tracks(
@@ -64,6 +84,93 @@ def choose_keyframes_by_interval(
 
     if keyframes[-1] != num_frames - 1:
         keyframes.append(num_frames - 1)
+
+    return keyframes
+
+
+def relative_motion_from_last_keyframe(last_kf_np_pose, current_np_pose) -> tuple[float, float]:
+    last_pose = pose3_from_world_to_camera_extrinsic(last_kf_np_pose)
+    current_pose = pose3_from_world_to_camera_extrinsic(current_np_pose)
+    relative_pose = last_pose.between(current_pose)
+    translation = float(np.linalg.norm(relative_pose.translation()))
+
+    # Axis-angle rotation magnitude: trace(R) = 1 + 2 cos(theta).
+    relative_rotation = relative_pose.rotation().matrix()
+    cosine_angle = 0.5 * (np.trace(relative_rotation) - 1.0)
+    cosine_angle = float(np.clip(cosine_angle, -1.0, 1.0))
+    rotation_deg = float(np.degrees(np.arccos(cosine_angle)))
+
+    return translation, rotation_deg
+
+
+def choose_keyframes_by_motion(
+    poses,
+    min_gap: int = 11,
+    max_gap: int = 20,
+    min_translation: float = 5.0,
+    min_rotation_deg: float = 12.0,
+    target_translation: float = 5.0,
+    target_rotation_deg: float = 12.0,
+) -> list[int]:
+    """Choose keyframes according to estimated camera motion.
+
+    ``poses`` is the world-to-camera extrinsic array. Starting from the last
+    selected keyframe, we inspect only the next bounded candidate range and pick
+    the candidate whose motion is closest to the desired skeleton spacing. This
+    avoids greedily accepting the first frame that passes the threshold.
+    """
+    keyframes = [0]
+    last_kf = 0
+    final_frame = len(poses) - 1
+
+    while last_kf < final_frame:
+        first_candidate = min(last_kf + min_gap, final_frame)
+        last_candidate = min(last_kf + max_gap, final_frame)
+
+        if first_candidate == final_frame:
+            keyframes.append(final_frame)
+            break
+
+        candidates = []
+
+        for frame_id in range(first_candidate, last_candidate + 1):
+            translation, rotation_deg = relative_motion_from_last_keyframe(
+                poses[last_kf],
+                poses[frame_id],
+            )
+
+            enough_motion = translation >= min_translation or rotation_deg >= min_rotation_deg
+
+            candidates.append(
+                (
+                    frame_id,
+                    translation,
+                    rotation_deg,
+                    enough_motion,
+                )
+            )
+
+        valid_candidates = [candidate for candidate in candidates if candidate[3]]
+
+        if valid_candidates:
+            chosen_frame, _, _, _ = min(
+                valid_candidates,
+                key=lambda candidate: (
+                    abs(candidate[1] - target_translation) / target_translation
+                    + abs(candidate[2] - target_rotation_deg) / target_rotation_deg
+                ),
+            )
+        else:
+            chosen_frame = last_candidate
+
+        if chosen_frame == keyframes[-1]:
+            break
+
+        keyframes.append(chosen_frame)
+        last_kf = chosen_frame
+
+    if keyframes[-1] != final_frame:
+        keyframes.append(final_frame)
 
     return keyframes
 
