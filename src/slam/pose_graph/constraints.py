@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
-from slam.ba.results import BundleWindowSolution
+from src.slam.ba.results import BundleWindowSolution
 
 
 @dataclass(frozen=True)

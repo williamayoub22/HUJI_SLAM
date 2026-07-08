@@ -128,8 +128,7 @@ def detect_candidates_for_keyframe(
     mahalanobis_threshold: float,
     max_candidates: int | None = None,
 ) -> list[LoopClosureCandidate]:
-    """Return candidates whose empirical Mahalanobis score passes the gate.
-    """
+    """Return candidates whose empirical Mahalanobis score passes the gate."""
     if mahalanobis_threshold <= 0:
         raise ValueError("mahalanobis_threshold must be positive.")
 

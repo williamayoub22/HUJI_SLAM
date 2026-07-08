@@ -7,7 +7,7 @@ import numpy as np
 from gtsam.symbol_shorthand import C
 
 from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
-from src.slam.config import SEQUENCE_DIR
+from src.slam.config import SEQUENCE_DIR, EX7_OUTPUT_DIR, GT_POSES_PATH
 from src.slam.loop_closure.candidate_detection import (
     ConsensusMatcher,
     ConsensusMatchResult,
@@ -32,8 +32,11 @@ from src.slam.visualization.ex7_plots import (
     plot_pose_graphs_versions,
 )
 
-MAHALANOBIS_THRESHOLD = 52720.3
+MAHALANOBIS_THRESHOLD = 32023.8
 NUM_LOOP_CLOSURE_REPRESENTATIVES = 10
+
+MIN_REPRESENTATIVE_LOOP_INLIERS = 30
+MAX_REFINED_COVARIANCE_CONDITION = 1e8
 
 
 def _is_geometrically_close(
@@ -505,17 +508,34 @@ def q_2(
         else:
             print(f"  Result: rejected — {result.failure_reason}")
 
-    successful_results = [result for result in results if result.success]
+    verified_results = [result for result in results if result.success]
+
+    robust_results = [
+        result
+        for result in verified_results
+        if result.num_inliers >= MIN_REPRESENTATIVE_LOOP_INLIERS
+    ]
+
+    selected_results = select_spread_loop_closures(
+        robust_results,
+        num_representatives=NUM_LOOP_CLOSURE_REPRESENTATIVES,
+    )
 
     print("\n" + "=" * 60)
     print("Consensus-matching summary")
     print("=" * 60)
-    print(f"Candidates tested:      {len(results)}")
-    print(f"Verified loop closures: {len(successful_results)}")
+    print(f"Candidates tested:              {len(results)}")
+    print(f"Verified loop closures:         {len(verified_results)}")
+    print(
+        "Robust loop closures:           "
+        f"{len(robust_results)} "
+        f"(inliers >= {MIN_REPRESENTATIVE_LOOP_INLIERS})"
+    )
+    print(f"Selected for BA refinement:     {len(selected_results)}")
 
-    if successful_results:
-        print("\nAccepted loop closures:")
-        for result in successful_results:
+    if selected_results:
+        print("\nSelected loop closures for refinement:")
+        for result in selected_results:
             candidate = result.candidate
             print(
                 f"  c_{candidate.source_frame} -> c_{candidate.target_frame}: "
@@ -523,25 +543,19 @@ def q_2(
                 f"({100.0 * result.inlier_ratio:.1f}%)"
             )
 
-    return successful_results
+    return selected_results
 
 
 def q_3(
-    verified_results: list[ConsensusMatchResult],
+    selected_results: list[ConsensusMatchResult],
 ) -> list[RelativePoseEstimate]:
-    """Section 7.3: refine selected consensus matches using two-frame stereo BA
+    """Section 7.3: refine the selected consensus matches using two-frame stereo BA
     and extract a relative-pose covariance for each loop constraint.
     """
-    representatives = select_spread_loop_closures(
-        verified_results,
-        num_representatives=NUM_LOOP_CLOSURE_REPRESENTATIVES,
-    )
-
     print("\n" + "=" * 60)
     print("[7.3] Relative Pose Estimation")
     print("=" * 60)
-    print(f"Verified loop closures:        {len(verified_results)}")
-    print(f"Representative links refined:  {len(representatives)}")
+    print(f"Selected loop closures refined: {len(selected_results)}")
     print(
         "Initialization:                source pose fixed at identity; "
         "target initialized from PnP/RANSAC"
@@ -553,25 +567,35 @@ def q_3(
 
     estimates: list[RelativePoseEstimate] = []
 
-    for index, result in enumerate(representatives, start=1):
+    for index, result in enumerate(selected_results, start=1):
         candidate = result.candidate
 
         print(
-            f"\nLoop {index}/{len(representatives)}: "
+            f"\nLoop {index}/{len(selected_results)}: "
             f"c_{candidate.source_frame} -> c_{candidate.target_frame}"
         )
 
         estimate = refine_relative_pose_with_bundle_adjustment(result)
-        estimates.append(estimate)
-
         covariance_std = np.sqrt(np.diag(estimate.covariance))
+        covariance_condition = np.linalg.cond(estimate.covariance)
 
         print(f"  Inlier landmarks:       {estimate.num_landmarks}")
         print(
             f"  BA error:               {estimate.initial_error:.2f} -> {estimate.final_error:.2f}"
         )
         print(f"  Relative-pose std:       {np.array2string(covariance_std, precision=5)}")
-        print(f"  Covariance condition:    {np.linalg.cond(estimate.covariance):.2e}")
+        print(f"  Covariance condition:    {covariance_condition:.2e}")
+
+        if covariance_condition > MAX_REFINED_COVARIANCE_CONDITION:
+            print(
+                "  Result: rejected refined loop closure — "
+                f"covariance condition {covariance_condition:.2e} "
+                f"> {MAX_REFINED_COVARIANCE_CONDITION:.1e}"
+            )
+            continue
+
+        estimates.append(estimate)
+        print("  Result: accepted refined loop closure")
 
     return estimates
 
@@ -654,10 +678,6 @@ def q_5(
     num_successful = sum(1 for r in verified_results if r.success)
     print(f"Number of successful loop closures detected: {num_successful}")
 
-    import numpy as np
-
-    from src.slam.config import EX7_OUTPUT_DIR, GT_POSES_PATH
-
     EX7_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_dir = EX7_OUTPUT_DIR
 
@@ -697,6 +717,44 @@ def q_5(
     )
     print("Generated location_uncertainty.png (Measure: det(Cov_translation))")
 
+    def compute_location_errors(values, gt_world_to_camera_extrinsics, keyframe_ids):
+        errors = []
+
+        for frame_id in keyframe_ids:
+            estimated_position = np.asarray(values.atPose3(C(frame_id)).translation())
+
+            gt_pose = pose3_from_world_to_camera_extrinsic(gt_world_to_camera_extrinsics[frame_id])
+            gt_position = np.asarray(gt_pose.translation())
+
+            errors.append(np.linalg.norm(estimated_position - gt_position))
+
+        return np.asarray(errors)
+
+    errors_without_lc = compute_location_errors(
+        pose_graph_result.optimized_estimates,
+        gt_world_to_camera_extrinsics,
+        keyframe_ids,
+    )
+
+    errors_with_lc = compute_location_errors(
+        updated_pose_graph_result.optimized_estimates,
+        gt_world_to_camera_extrinsics,
+        keyframe_ids,
+    )
+
+    print("\nAbsolute location error against GT")
+    print("----------------------------------")
+    print(
+        f"Without LC: max={errors_without_lc.max():.2f} m, "
+        f"mean={errors_without_lc.mean():.2f} m, "
+        f"final={errors_without_lc[-1]:.2f} m"
+    )
+    print(
+        f"With LC:    max={errors_with_lc.max():.2f} m, "
+        f"mean={errors_with_lc.mean():.2f} m, "
+        f"final={errors_with_lc[-1]:.2f} m"
+    )
+
 
 def main() -> None:
     (
@@ -706,8 +764,8 @@ def main() -> None:
         world_to_camera_extrinsics,
         keyframe_ids,
     ) = q_1()
-    verified_results = q_2(candidates_by_target)
-    estimates = q_3(verified_results)
+    selected_results = q_2(candidates_by_target)
+    estimates = q_3(selected_results)
 
     updated_pose_graph_result, versions = q_4(
         graph=build_result.graph,
@@ -717,7 +775,7 @@ def main() -> None:
     )
 
     q_5(
-        verified_results=verified_results,
+        verified_results=selected_results,
         pose_graph_result=pose_graph_result,
         updated_pose_graph_result=updated_pose_graph_result,
         versions=versions,

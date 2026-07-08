@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 import numpy as np
-from slam.pose_graph.constraints import symmetrize
+from src.slam.pose_graph.constraints import symmetrize
 
 
 def covariance_volume(covariance: np.ndarray) -> float:
@@ -183,8 +183,7 @@ def mahalanobis_squared(
     delta: np.ndarray,
     covariance: np.ndarray,
 ) -> float:
-    """Compute delta^T Sigma^{-1} delta without explicitly inverting Sigma.
-    """
+    """Compute delta^T Sigma^{-1} delta without explicitly inverting Sigma."""
     delta = np.asarray(delta, dtype=float).reshape(-1)
     covariance = symmetrize(covariance)
 

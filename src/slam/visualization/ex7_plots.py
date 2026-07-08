@@ -94,9 +94,14 @@ def plot_consensus_match(result: ConsensusMatchResult, output_path: Path) -> Non
         img_outliers,
         matchColor=(0, 255, 255),
         singlePointColor=(0, 255, 255),
-        flags=0,
+        flags=cv2.DrawMatchesFlags_DRAW_OVER_OUTIMG,
     )
-
+    print(
+        "Plotting consensus match:",
+        f"total={len(result.source_left)}",
+        f"inliers={np.sum(result.inlier_mask)}",
+        f"outliers={len(result.inlier_mask) - np.sum(result.inlier_mask)}",
+    )
     plt.figure(figsize=(15, 6))
     plt.imshow(img_matches)
     plt.title(
@@ -153,7 +158,7 @@ def plot_pose_graphs_versions(versions: list, frame_ids: list[int], output_path:
         ax.plot(positions[:, 0], positions[:, 2], label="Pose Graph", color="blue", linewidth=2)
 
         if marginals is not None:
-            _add_covariance_ellipses(ax, marginals, frame_ids, positions, step=10)
+            _add_covariance_ellipses(ax, marginals, frame_ids, positions, step=5)
 
         ax.set_title(title)
         ax.set_xlabel("X [m]")
