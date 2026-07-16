@@ -4,7 +4,7 @@ import gtsam
 import numpy as np
 from slam.ba.graph_builder import build_local_bundle_graph
 from slam.ba.results import BundleAdjustmentResult
-from slam.tracking_database import TrackingDB
+from slam.database.facade import SlamDatabase
 
 
 def _validate_graph_keys(
@@ -52,8 +52,7 @@ def _validate_graph_keys(
 
 
 def optimize_bundle_window(
-    db: TrackingDB,
-    world_to_camera_extrinsics: np.ndarray,
+    slam_db: SlamDatabase,
     calibration: gtsam.Cal3_S2Stereo,
     window_frames: list[int],
     min_track_observations: int = 2,
@@ -62,8 +61,7 @@ def optimize_bundle_window(
     """Build and optimize one local stereo bundle-adjustment window.
 
     Args:
-        db: Tracking database containing stereo observations.
-        world_to_camera_extrinsics: World-to-camera extrinsics for all frames.
+        slam_db: Unified tracking database.
         calibration: Stereo camera calibration.
         window_frames: Consecutive frame IDs in the local optimization window.
         min_track_observations: Minimum observations required to retain a track.
@@ -78,8 +76,7 @@ def optimize_bundle_window(
         ValueError: If the requested window or optimization parameters are invalid.
     """
     graph, initial, track_ids, projection_factor_metadata = build_local_bundle_graph(
-        db=db,
-        world_to_camera_extrinsics=world_to_camera_extrinsics,
+        slam_db=slam_db,
         calibration=calibration,
         window_frames=window_frames,
         min_track_observations=min_track_observations,

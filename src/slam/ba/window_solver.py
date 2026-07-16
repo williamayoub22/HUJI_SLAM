@@ -4,7 +4,7 @@ from time import perf_counter
 
 import gtsam
 import numpy as np
-from slam.tracking_database import TrackingDB
+from slam.database.facade import SlamDatabase
 
 from .optimization import optimize_bundle_window
 from .results import BundleWindowSolution
@@ -12,8 +12,7 @@ from .window_selection import bundle_windows_from_keyframes
 
 
 def solve_all_bundle_windows(
-    db: TrackingDB,
-    world_to_camera_extrinsics: np.ndarray,
+    slam_db: SlamDatabase,
     calibration: gtsam.Cal3_S2Stereo,
     keyframes: list[int],
     min_track_observations: int = 2,
@@ -25,8 +24,7 @@ def solve_all_bundle_windows(
     Each window is optimized in the coordinate system of its first frame.
 
     Args:
-        db: Tracking database containing stereo observations.
-        world_to_camera_extrinsics: World-to-camera extrinsics for all frames.
+        slam_db: Unified tracking database containing 2D tracks and poses.
         calibration: Stereo camera calibration.
         keyframes: Ordered keyframe IDs defining local BA windows.
         min_track_observations: Minimum observations required to retain a track.
@@ -59,8 +57,7 @@ def solve_all_bundle_windows(
         start_time = perf_counter()
 
         result = optimize_bundle_window(
-            db=db,
-            world_to_camera_extrinsics=world_to_camera_extrinsics,
+            slam_db=slam_db,
             calibration=calibration,
             window_frames=window_frames,
             min_track_observations=min_track_observations,

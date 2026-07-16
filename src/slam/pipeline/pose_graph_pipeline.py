@@ -10,7 +10,7 @@ from src.slam.config import (
     GLOBAL_CAMERA_MATRICES_PATH,
 )
 from src.slam.io.calibration import read_stereo_calibration
-from src.slam.pipeline.database_pipeline import load_tracking_database
+from src.slam.database.facade import SlamDatabase
 from src.slam.pose_graph.constraints import extract_relative_pose_constraint
 
 
@@ -32,15 +32,15 @@ def load_ex6_inputs():
 
 
 def solve_bundle_windows_and_extract_constraints(
-    db,
-    world_to_camera_extrinsics,
+    slam_db: SlamDatabase,
     calibration,
     verbose: bool = True,
 ):
     """Solve local BA windows and convert each optimized window into
     one relative keyframe constraint for the pose graph.
     """
-    keyframes = choose_keyframes_by_motion(poses=world_to_camera_extrinsics)
+    poses = [slam_db.manager_poses.get_pose(i) for i in range(len(slam_db.manager_poses.get_all_poses()))]
+    keyframes = choose_keyframes_by_motion(poses=np.array(poses))
 
     if verbose:
         print(f"Selected {len(keyframes)} motion-based keyframes.")
@@ -48,8 +48,7 @@ def solve_bundle_windows_and_extract_constraints(
         print(f"Last keyframes:  {keyframes[-10:]}")
 
     bundle_solutions = solve_all_bundle_windows(
-        db=db,
-        world_to_camera_extrinsics=world_to_camera_extrinsics,
+        slam_db=slam_db,
         calibration=calibration,
         keyframes=keyframes,
         verbose=verbose,
