@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..tracking_database import TrackingDB
+from src.slam.database.tracking_database import TrackingDB
 
 
 @dataclass

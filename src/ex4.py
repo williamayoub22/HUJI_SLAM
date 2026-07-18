@@ -11,7 +11,7 @@ from slam.io.calibration import read_stereo_calibration
 from slam.io.image_loader import read_images
 from slam.io.poses import read_ground_truth_poses
 from slam.pipeline.database_pipeline import build_tracking_database
-from slam.tracking_database import TrackingDB
+from src.slam.database.tracking_database import TrackingDB
 from tqdm import tqdm
 
 SECTION_7_MIN_TRACKS_LENGTH = 10

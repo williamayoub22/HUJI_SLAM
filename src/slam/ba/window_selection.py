@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 import numpy as np
-from slam.tracking_database import TrackingDB
+from src.slam.database.tracking_database import TrackingDB
 
 from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
 

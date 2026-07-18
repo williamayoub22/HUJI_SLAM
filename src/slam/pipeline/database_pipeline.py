@@ -14,7 +14,7 @@ from ..geometry.triangulation import triangulate_opencv
 from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import read_images
 from ..pipeline.stereo_pipeline import DEVIATION_THRESHOLD
-from ..tracking_database import Link, TrackingDB
+from src.slam.database.tracking_database import Link, TrackingDB
 
 
 @dataclass
