@@ -19,7 +19,7 @@ from src.slam.ba.results import BundleAdjustmentResult, ProjectionFactorMetadata
 from src.slam.ba.window_selection import collect_window_tracks, bundle_windows_from_keyframes, choose_keyframes_by_motion
 from src.slam.config import (
     SEQUENCE_DIR,
-    EX8_OUTPUT_DIR,
+    CACHE_DIR,
     GT_POSES_PATH
 )
 from src.slam.database.facade import SlamDatabase
@@ -52,6 +52,13 @@ from src.slam.visualization.ex7_plots import (
     plot_location_uncertainty,
     plot_pose_graph_comparisons,
     plot_pose_graphs_versions,
+    positions_from_values,
+)
+from src.final_project_analysis import (
+    compute_pnp_analysis,
+    compute_bundle_adjustment_analysis,
+    prepare_bundle_adjustment_analysis,
+    compute_bundle_window_errors,
 )
 
 MAHALANOBIS_THRESHOLD = 32023.8
@@ -341,14 +348,14 @@ def _group_candidates_by_target(
 
 
 def build_database():
-    EX8_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     
     P1, P2 = read_stereo_calibration()
     K = P1[:, :3]
     calibration = gtsam.Cal3_S2Stereo(P1[0,0], P1[1,1], 0.0, P1[0,2], P1[1,2], -P2[0,3] / P1[0,0])
 
-    db_path = EX8_OUTPUT_DIR / "slam_db"
-    full_db_path = EX8_OUTPUT_DIR / "slam_db.pkl"
+    db_path = CACHE_DIR / "slam_db"
+    full_db_path = CACHE_DIR / "slam_db.pkl"
 
     if full_db_path.exists():
         print(f"Loading database from {full_db_path}...")
@@ -363,6 +370,8 @@ def build_database():
     
     global_T = np.eye(4)
     slam_db.manager_poses.add_pose(0, global_T)
+    global_camera_matrices = [global_T[:3, :].copy()]
+    inlier_percentages = []
     
     prev_frame_data = _create_frame_data(
         frame_idx=0,
@@ -398,6 +407,9 @@ def build_database():
             P1=P1,
             P2=P2,
         )
+        
+        inlier_ratio = sum(temporal_inliers) / len(temporal_matches) if len(temporal_matches) > 0 else 0.0
+        inlier_percentages.append(inlier_ratio)
         
         candidate_prev_3d = []
         candidate_prev_left = []
@@ -435,6 +447,7 @@ def build_database():
         step_T = to_homogeneous_transform(T_rel)
         global_T = step_T @ global_T
         slam_db.manager_poses.add_pose(frame_idx, global_T)
+        global_camera_matrices.append(global_T[:3, :].copy())
         
         slam_db.manager_2d.add_frame(
             links=cur_frame_data.links,
@@ -466,8 +479,11 @@ def build_database():
         
         slam_db.manager_3d.add_point(track_id, point_3d_world)
 
-    db_path = EX8_OUTPUT_DIR / "slam_db"
+    db_path = CACHE_DIR / "slam_db"
     slam_db.serialize(str(db_path))
+    
+    np.save(CACHE_DIR / "global_camera_matrices.npy", np.array(global_camera_matrices, dtype=float))
+    np.save(CACHE_DIR / "inlier_percentages.npy", np.array(inlier_percentages, dtype=float))
     
     return slam_db, calibration
 def q_1():
@@ -831,44 +847,86 @@ def q_5(
     num_successful = sum(1 for r in verified_results if r.success)
     print(f"Number of successful loop closures detected: {num_successful}")
 
-    EX8_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_dir = EX8_OUTPUT_DIR
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    
+    versions_data = []
+    for title, values, marginals in versions:
+        positions = positions_from_values(values, keyframe_ids)
+        covs = {}
+        if marginals is not None:
+            for fid in keyframe_ids:
+                covs[fid] = np.asarray(marginals.marginalCovariance(gtsam.symbol("c", fid)))
+        versions_data.append({
+            "title": title,
+            "positions": positions,
+            "covariances": covs if marginals is not None else None
+        })
 
+    match_data = None
     if num_successful > 0:
         successful = [r for r in verified_results if r.success]
-        plot_consensus_match(successful[0], output_dir / "consensus_match.png")
-        print("Generated consensus_match.png")
+        first = successful[0]
+        match_data = {
+            "source_frame": first.candidate.source_frame,
+            "target_frame": first.candidate.target_frame,
+            "source_left": first.source_left,
+            "target_left": first.target_left,
+            "inlier_mask": first.inlier_mask,
+        }
+        
+    lc_stats = []
+    if num_successful > 0:
+        successful = [r for r in verified_results if r.success]
+        for r in successful:
+            lc_stats.append({
+                "target_frame": r.candidate.target_frame,
+                "source_frame": r.candidate.source_frame,
+                "num_matches": r.num_four_view_matches,
+                "inlier_percentage": r.inlier_ratio * 100.0,
+            })
 
-    plot_pose_graphs_versions(versions, keyframe_ids, output_dir / "pose_graph_versions.png")
-    print("Generated pose_graph_versions.png")
+    # Compute data for projection errors & bundle window errors
+    pnp_projection_data = compute_pnp_analysis(slam_db)
+    ba_projection_data = compute_bundle_adjustment_analysis(slam_db)
+    ba_context = prepare_bundle_adjustment_analysis(slam_db)
+    (
+        window_ids,
+        initial_average_errors,
+        final_average_errors,
+        initial_median_proj_errors,
+        final_median_proj_errors,
+    ) = compute_bundle_window_errors(ba_context.solutions)
+
+    import pickle
+    plot_data_path = CACHE_DIR / "q5_plot_data.pkl"
+    with open(plot_data_path, "wb") as f:
+        pickle.dump({
+            "versions_data": versions_data,
+            "match_data": match_data,
+            "keyframe_ids": keyframe_ids,
+            "pnp_projection_data": pnp_projection_data,
+            "ba_projection_data": ba_projection_data,
+            "bundle_window_errors": {
+                "window_ids": window_ids,
+                "initial_average_errors": initial_average_errors,
+                "final_average_errors": final_average_errors,
+                "initial_median_proj_errors": initial_median_proj_errors,
+                "final_median_proj_errors": final_median_proj_errors,
+            },
+            "pose_graph_matrices": [
+                np.asarray(pose_graph_result.optimized_estimates.atPose3(C(fid)).matrix())
+                for fid in keyframe_ids
+            ],
+            "pose_graph_lc_matrices": [
+                np.asarray(updated_pose_graph_result.optimized_estimates.atPose3(C(fid)).matrix())
+                for fid in keyframe_ids
+            ],
+            "lc_stats": lc_stats,
+        }, f)
+        
+    print(f"Plot data serialized to {plot_data_path}")
 
     gt_world_to_camera_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
-
-    plot_pose_graph_comparisons(
-        pose_graph_result.optimized_estimates,
-        updated_pose_graph_result.optimized_estimates,
-        gt_world_to_camera_extrinsics,
-        keyframe_ids,
-        output_dir / "pose_graph_comparison.png",
-    )
-    print("Generated pose_graph_comparison.png")
-
-    plot_absolute_location_error(
-        pose_graph_result.optimized_estimates,
-        updated_pose_graph_result.optimized_estimates,
-        gt_world_to_camera_extrinsics,
-        keyframe_ids,
-        output_dir / "absolute_location_error.png",
-    )
-    print("Generated absolute_location_error.png")
-
-    marginals_no_lc = versions[0][2]
-    marginals_lc = versions[-1][2]
-
-    plot_location_uncertainty(
-        marginals_no_lc, marginals_lc, keyframe_ids, output_dir / "location_uncertainty.png"
-    )
-    print("Generated location_uncertainty.png (Measure: det(Cov_translation))")
 
     def compute_location_errors(values, gt_world_to_camera_extrinsics, keyframe_ids):
         errors = []

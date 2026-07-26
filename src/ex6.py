@@ -1,19 +1,19 @@
-from slam.analysis.pose_graph_diagnostics import (
+from src.slam.analysis.pose_graph_diagnostics import (
     format_pose_graph_report,
     format_relative_constraint_report,
 )
-from slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
-from slam.config import EX6_OUTPUT_DIR
-from slam.pipeline.pose_graph_pipeline import (
+from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
+from src.slam.config import EX6_OUTPUT_DIR
+from src.slam.pipeline.pose_graph_pipeline import (
     load_ex6_inputs,
     solve_bundle_windows_and_extract_constraints,
 )
-from slam.pose_graph.graph_builder import build_pose_graph
-from slam.pose_graph.optimization import (
+from src.slam.pose_graph.graph_builder import build_pose_graph
+from src.slam.pose_graph.optimization import (
     compute_pose_graph_marginals,
     optimize_pose_graph,
 )
-from slam.visualization.ex6_plots import (
+from src.slam.visualization.ex6_plots import (
     plot_bundle_window_trajectory_with_covariances,
     plot_pose_graph_top_down,
     positions_from_values,

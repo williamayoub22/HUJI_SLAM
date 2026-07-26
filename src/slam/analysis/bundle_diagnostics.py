@@ -4,15 +4,15 @@ from dataclasses import dataclass
 
 import gtsam
 from gtsam.symbol_shorthand import C, Q
-from slam.ba.gtsam_utils import (
+from src.slam.ba.gtsam_utils import (
     stereo_image_distances,
     stereo_point_from_triplet,
 )
-from slam.ba.results import (
+from src.slam.ba.results import (
     BundleAdjustmentResult,
     ProjectionFactorMetadata,
 )
-from slam.tracking_database import TrackingDB
+from src.slam.tracking_database import TrackingDB
 
 
 @dataclass(frozen=True)

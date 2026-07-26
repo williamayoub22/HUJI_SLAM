@@ -3,7 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-from slam.geometry.transforms import (
+from src.slam.geometry.transforms import (
     camera_centers_from_world_to_camera_extrinsics,
 )
 

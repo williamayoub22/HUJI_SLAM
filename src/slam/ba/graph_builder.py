@@ -21,7 +21,7 @@
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-from slam.database.facade import SlamDatabase
+from src.slam.database.facade import SlamDatabase
 
 from ..geometry.transforms import (
     relative_world_to_camera_extrinsic,

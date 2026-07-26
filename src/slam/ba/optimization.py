@@ -2,9 +2,9 @@
 
 import gtsam
 import numpy as np
-from slam.ba.graph_builder import build_local_bundle_graph
-from slam.ba.results import BundleAdjustmentResult
-from slam.database.facade import SlamDatabase
+from src.slam.ba.graph_builder import build_local_bundle_graph
+from src.slam.ba.results import BundleAdjustmentResult
+from src.slam.database.facade import SlamDatabase
 
 
 def _validate_graph_keys(

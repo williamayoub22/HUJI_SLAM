@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import numpy as np
-from slam.config import CALIBRATION_PATH
+from src.slam.config import CALIBRATION_PATH
 
 DEFAULT_CALIBRATION_PATH = CALIBRATION_PATH
 

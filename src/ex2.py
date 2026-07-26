@@ -2,15 +2,15 @@ from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
-from slam.geometry.triangulation import triangulate_dlt, triangulate_opencv
-from slam.io.calibration import read_stereo_calibration
-from slam.pipeline.stereo_pipeline import (
+from src.slam.geometry.triangulation import triangulate_dlt, triangulate_opencv
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.pipeline.stereo_pipeline import (
     DEVIATION_THRESHOLD,
     StereoMatchData,
     get_inlier_points,
     load_frame_data,
 )
-from slam.visualization.visualization import plot_point_cloud_on_axis
+from src.slam.visualization.visualization import plot_point_cloud_on_axis
 
 FRAME_INDEX = 0
 DEFAULT_FRAMES = (0, 1, 2, 3)

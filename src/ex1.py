@@ -3,9 +3,9 @@ import random
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from slam.features.detectors import extract_features
-from slam.features.matching import RATIO_THRESHOLD, filter_matches_ratio, match_features
-from slam.io.image_loader import read_images
+from src.slam.features.detectors import extract_features
+from src.slam.features.matching import RATIO_THRESHOLD, filter_matches_ratio, match_features
+from src.slam.io.image_loader import read_images
 
 # --- Algorithm Parameters ---
 NUM_FEATURES = 1000

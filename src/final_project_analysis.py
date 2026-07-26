@@ -3,17 +3,17 @@ import matplotlib.pyplot as plt
 
 from src.slam.ba.results import BundleWindowSolution
 from src.slam.ba.window_selection import choose_keyframes_by_motion
-from src.slam.config import CACHE_DIR, EX8_OUTPUT_DIR
+from src.slam.config import CACHE_DIR, FINAL_ANALYSIS_OUTPUT_DIR
 from src.slam.database.facade import SlamDatabase
 
 from gtsam.symbol_shorthand import C, Q
 
-from slam.ba.gtsam_utils import (
+from src.slam.ba.gtsam_utils import (
     pose3_from_world_to_camera_extrinsic,
 )
 
 
-from slam.ba.window_solver import solve_all_bundle_windows
+from src.slam.ba.window_solver import solve_all_bundle_windows
 from src.slam.config import GLOBAL_CAMERA_MATRICES_PATH
 
 from collections import defaultdict
@@ -21,18 +21,18 @@ from collections import defaultdict
 import gtsam
 import numpy as np
 
-from slam.ba.gtsam_utils import (
+from src.slam.ba.gtsam_utils import (
     make_gtsam_stereo_calibration,
     make_stereo_camera,
     stereo_image_distances,
     stereo_point_from_triplet,
 )
-from slam.geometry.transforms import to_homogeneous_transform
-from slam.io.calibration import read_stereo_calibration
+from src.slam.geometry.transforms import to_homogeneous_transform
+from src.slam.io.calibration import read_stereo_calibration
 from src.slam.pipeline.pose_graph_pipeline import solve_bundle_windows_and_extract_constraints
 
 DATABASE_PATH = CACHE_DIR / "slam_db"
-OUTPUT_DIR = EX8_OUTPUT_DIR
+OUTPUT_DIR = FINAL_ANALYSIS_OUTPUT_DIR
 from src.slam.config import PROJECT_DIR
 
 INLIER_PERCENTAGES_PATH = PROJECT_DIR / "outputs" / "ex4" / "inlier_percentages.npy"
@@ -520,6 +520,17 @@ def compute_median_projection_errors_by_distance(
     )
 
 
+def load_inlier_percentages():
+    from src.slam.config import PROJECT_DIR
+    inlier_path = PROJECT_DIR / "outputs" / "ex4" / "inlier_percentages.npy"
+    if not inlier_path.exists():
+        print(f"Warning: {inlier_path} not found. Defaulting to 100%.")
+        return np.ones(3300) * 100.0
+    arr = np.load(inlier_path)
+    print(f"Loaded {len(arr)} inlier percentages from {inlier_path}")
+    return arr
+
+
 def plot_inlier_percentages(
     inlier_percentages,
     output_dir=OUTPUT_DIR,
@@ -760,14 +771,12 @@ def extract_bundle_window_average_errors(bundle_solutions):
     )
 
 
-def plot_bundle_window_average_errors(
-    bundle_solutions,
-    output_dir=OUTPUT_DIR,
-):
-    """Plot normalized factor error before and after BA."""
+def compute_bundle_window_errors(bundle_solutions):
     window_ids = []
     initial_average_errors = []
     final_average_errors = []
+    initial_median_proj_errors = []
+    final_median_proj_errors = []
 
     for window_index, solution in enumerate(
         bundle_solutions,
@@ -778,7 +787,6 @@ def plot_bundle_window_average_errors(
         if result.num_factors <= 0:
             continue
 
-        # These values are already normalized by the factor count.
         initial_error = float(
             result.average_initial_error
         )
@@ -792,29 +800,40 @@ def plot_bundle_window_average_errors(
         ):
             continue
 
+        init_proj_errors = []
+        final_proj_errors = []
+        for metadata in result.projection_factor_metadata:
+            factor = result.graph.at(metadata.factor_index)
+            # unwhitenedError returns [uL_err, uR_err, v_err]
+            e_init = factor.unwhitenedError(result.initial)
+            e_final = factor.unwhitenedError(result.optimized)
+            init_proj_errors.append(np.linalg.norm(e_init))
+            final_proj_errors.append(np.linalg.norm(e_final))
+
         window_ids.append(window_index)
         initial_average_errors.append(initial_error)
         final_average_errors.append(final_error)
+        initial_median_proj_errors.append(np.median(init_proj_errors) if init_proj_errors else 0.0)
+        final_median_proj_errors.append(np.median(final_proj_errors) if final_proj_errors else 0.0)
 
-    if not window_ids:
-        print(
-            "WARNING: No valid bundle-window errors "
-            "were available."
-        )
-        return None
+    return (
+        np.asarray(window_ids, dtype=int),
+        np.asarray(initial_average_errors, dtype=float),
+        np.asarray(final_average_errors, dtype=float),
+        np.asarray(initial_median_proj_errors, dtype=float),
+        np.asarray(final_median_proj_errors, dtype=float),
+    )
 
-    window_ids = np.asarray(
-        window_ids,
-        dtype=int,
-    )
-    initial_average_errors = np.asarray(
-        initial_average_errors,
-        dtype=float,
-    )
-    final_average_errors = np.asarray(
-        final_average_errors,
-        dtype=float,
-    )
+
+def plot_bundle_window_errors(
+    window_ids,
+    initial_average_errors,
+    final_average_errors,
+    output_dir=OUTPUT_DIR,
+):
+    """Plot normalized factor error before and after BA."""
+    print(f"Mean initial average factor error: {np.mean(initial_average_errors):.6f}")
+    print(f"Mean final average factor error:   {np.mean(final_average_errors):.6f}")
 
     output_dir.mkdir(
         parents=True,
@@ -859,35 +878,9 @@ def plot_bundle_window_average_errors(
     )
     plt.close()
 
-    mean_initial = float(
-        np.mean(initial_average_errors)
-    )
-    mean_final = float(
-        np.mean(final_average_errors)
-    )
-
     print(
-        f"Mean initial average factor error: "
-        f"{mean_initial:.6f}"
+        f"Plot saved to {output_path}"
     )
-    print(
-        f"Mean final average factor error:   "
-        f"{mean_final:.6f}"
-    )
-
-    if mean_initial > 0:
-        reduction = (
-            100.0
-            * (mean_initial - mean_final)
-            / mean_initial
-        )
-
-        print(
-            f"Mean error reduction:              "
-            f"{reduction:.2f}%"
-        )
-
-    print(f"Plot saved to {output_path}")
 
     return output_path
 
@@ -945,26 +938,6 @@ def prepare_bundle_adjustment_analysis(
         keyframes=keyframes,
         solutions=solutions,
     )
-
-
-def load_inlier_percentages():
-    """Load the per-transition percentages generated in Exercise 4."""
-    if not INLIER_PERCENTAGES_PATH.exists():
-        print(
-            f"WARNING: Inlier percentages were not found at "
-            f"{INLIER_PERCENTAGES_PATH}.\n"
-            "Run Exercise 4 with REBUILD_DB = True to generate the file."
-        )
-        return np.asarray([], dtype=float)
-
-    percentages = np.asarray(
-        np.load(INLIER_PERCENTAGES_PATH),
-        dtype=float,
-    ).reshape(-1)
-
-    print(f"Loaded {len(percentages)} inlier percentages from {INLIER_PERCENTAGES_PATH}")
-
-    return percentages
 
 
 def run_bundle_window_error_analysis(database):
@@ -1073,11 +1046,11 @@ def run_tracking_analysis(database, inlier_percentages):
     histogram_plot_path = plot_track_length_histogram(
         track_lengths,
     )
-    #
-    # matches_plot_path = plot_matches_per_frame(
-    #     frame_ids,
-    #     matches_per_frame,
-    # )
+
+    matches_plot_path = plot_matches_per_frame(
+        frame_ids,
+        matches_per_frame,
+    )
 
     inliers_plot_path = plot_inlier_percentages(
         inlier_percentages,
@@ -1110,11 +1083,9 @@ def run_tracking_analysis(database, inlier_percentages):
         "track_length_histogram_path": (
             str(histogram_plot_path) if histogram_plot_path is not None else None
         ),
-        # "matches_per_frame_plot_path": (
-        #     str(matches_plot_path)
-        #     if matches_plot_path is not None
-        #     else None
-        # ),
+        "matches_per_frame_plot_path": (
+            str(matches_plot_path) if matches_plot_path else None
+        ),
         "inliers_per_frame_plot_path": (
             str(inliers_plot_path) if inliers_plot_path is not None else None
         ),
@@ -1246,7 +1217,7 @@ def plot_median_projection_errors(
     return output_path
 
 
-def run_pnp_analysis(database):
+def compute_pnp_analysis(database):
     """
     Compute temporal PnP reprojection errors using only estimated camera poses.
 
@@ -1284,21 +1255,11 @@ def run_pnp_analysis(database):
         max_distance=50,
     )
 
-    plot_path = plot_median_projection_errors(
-        distances=distances,
-        median_left_errors=median_left_errors,
-        median_right_errors=median_right_errors,
-        estimator_name="PnP temporal propagation",
-        output_filename="pnp_temporal_projection_error.png",
-        max_distance=50,
-    )
-
     return {
         "distances": distances,
         "median_left_errors": median_left_errors,
         "median_right_errors": median_right_errors,
         "sample_counts": sample_counts,
-        "plot_path": plot_path,
     }
 
 
@@ -1369,7 +1330,7 @@ def compose_camera_transform(
     return target_from_source
 
 
-def run_bundle_adjustment_analysis(database):
+def compute_bundle_adjustment_analysis(database):
     """Optimize each track landmark and compute BA reprojection errors."""
     print("\n" + "=" * 60)
     print("Track Bundle-Adjustment projection-error analysis")
@@ -1402,21 +1363,11 @@ def run_bundle_adjustment_analysis(database):
         max_distance=50,
     )
 
-    plot_path = plot_median_projection_errors(
-        distances=distances,
-        median_left_errors=median_left_errors,
-        median_right_errors=median_right_errors,
-        estimator_name="Bundle Adjustment",
-        output_filename="bundle_projection_error.png",
-        max_distance=50,
-    )
-
     return {
         "distances": distances,
         "median_left_errors": median_left_errors,
         "median_right_errors": median_right_errors,
         "sample_counts": sample_counts,
-        "plot_path": plot_path,
     }
 
 
@@ -1439,39 +1390,170 @@ def run_loop_closure_analysis(database):
 
 
 def main():
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
+    import os
+    import shutil
+    from src.slam.visualization.final_plots import (
+        plot_optimization_median_projection_error,
+        plot_trajectory_comparison_all,
+        plot_absolute_estimation_error,
+        plot_relative_estimation_error,
     )
-
+    from src.slam.config import GT_POSES_PATH, GLOBAL_CAMERA_MATRICES_PATH
+    
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    
     database = build_or_load_database()
+
+    with open(OUTPUT_DIR.parent / "cache" / "q5_plot_data.pkl", "rb") as f:
+        import pickle
+        plot_data = pickle.load(f)
+
+    # 1, 3, 4. Matches, Connectivity, Track length
     inlier_percentages = load_inlier_percentages()
+    run_tracking_analysis(database, inlier_percentages)
+    if (OUTPUT_DIR / "matches_per_frame.png").exists():
+        os.rename(OUTPUT_DIR / "matches_per_frame.png", OUTPUT_DIR / "1_matches_per_frame.png")
+    
+    # 2. Inliers per frame
+    if (OUTPUT_DIR / "inlier_percentage_per_frame.png").exists():
+        os.rename(OUTPUT_DIR / "inlier_percentage_per_frame.png", OUTPUT_DIR / "2_inlier_percentage_per_frame.png")
 
-    tracking_results = run_tracking_analysis(
-        database,
-        inlier_percentages,
+    # 3. Connectivity
+    if (OUTPUT_DIR / "frame_connectivity.png").exists():
+        os.rename(OUTPUT_DIR / "frame_connectivity.png", OUTPUT_DIR / "3_connectivity.png")
+    
+    # 4. Track length histogram
+    if (OUTPUT_DIR / "track_length_histogram.png").exists():
+        os.rename(OUTPUT_DIR / "track_length_histogram.png", OUTPUT_DIR / "4_track_length_histogram.png")
+
+    gt_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
+    frame_ids = plot_data["keyframe_ids"]
+    versions_data = plot_data["versions_data"]
+    lc_stats = plot_data.get("lc_stats")
+    pnp_extrinsics = np.asarray(np.load(GLOBAL_CAMERA_MATRICES_PATH), dtype=float)
+    pose_graph_matrices = plot_data["pose_graph_matrices"]
+    pose_graph_lc_matrices = plot_data["pose_graph_lc_matrices"]
+
+    # 5. Trajectory
+    plot_trajectory_comparison_all(
+        pnp_extrinsics=pnp_extrinsics,
+        bundle_extrinsics=pose_graph_matrices,
+        pg_lc_extrinsics=pose_graph_lc_matrices,
+        gt_extrinsics=gt_extrinsics,
+        frame_ids=frame_ids,
+        output_path=OUTPUT_DIR / "5_trajectory.png",
     )
 
-    # pnp_results = run_pnp_analysis(database)
-
-    # Keyframes and local BA are computed only once.
-    ba_context = prepare_bundle_adjustment_analysis(
-        database
-    )
-
-    bundle_window_error_path = (
-        plot_bundle_window_average_errors(
-            ba_context.solutions
+    # 6. Mean factor error
+    if "bundle_window_errors" in plot_data:
+        plot_bundle_window_factor_errors(
+            window_ids=plot_data["bundle_window_errors"]["window_ids"],
+            initial_mean_errors=plot_data["bundle_window_errors"]["initial_average_errors"],
+            optimized_mean_errors=plot_data["bundle_window_errors"]["final_average_errors"],
+            output_dir=OUTPUT_DIR,
         )
+        if (OUTPUT_DIR / "bundle_window_factor_errors.png").exists():
+            os.rename(OUTPUT_DIR / "bundle_window_factor_errors.png", OUTPUT_DIR / "6_optimization_mean_factor_error.png")
+
+    # 7. Median projection error
+    plot_optimization_median_projection_error(
+        window_ids=plot_data["bundle_window_errors"]["window_ids"],
+        initial_median_proj_errors=plot_data["bundle_window_errors"]["initial_median_proj_errors"],
+        final_median_proj_errors=plot_data["bundle_window_errors"]["final_median_proj_errors"],
+        output_path=OUTPUT_DIR / "7_optimization_median_projection_error.png",
     )
 
-    print(
-        f"Bundle-window average-error plot: "
-        f"{bundle_window_error_path}"
+    # 8. PnP Projection error vs distance
+    if "pnp_projection_data" in plot_data:
+        plot_median_projection_errors(
+            distances=plot_data["pnp_projection_data"]["distances"],
+            median_left_errors=plot_data["pnp_projection_data"]["median_left_errors"],
+            median_right_errors=plot_data["pnp_projection_data"]["median_right_errors"],
+            estimator_name="PnP temporal propagation",
+            output_filename="8_pnp_projection_error_vs_distance.png",
+            max_distance=50,
+        )
+
+    # 9. BA Projection error vs distance
+    if "ba_projection_data" in plot_data:
+        plot_median_projection_errors(
+            distances=plot_data["ba_projection_data"]["distances"],
+            median_left_errors=plot_data["ba_projection_data"]["median_left_errors"],
+            median_right_errors=plot_data["ba_projection_data"]["median_right_errors"],
+            estimator_name="Bundle Adjustment",
+            output_filename="9_bundle_projection_error_vs_distance.png",
+            max_distance=50,
+        )
+
+    # 10. Absolute PnP Error
+    plot_absolute_estimation_error(
+        estimated_poses=pnp_extrinsics,
+        gt_poses=gt_extrinsics,
+        frame_ids=frame_ids,
+        title_prefix="PnP",
+        output_path=OUTPUT_DIR / "10_absolute_pnp_error.png",
+        is_values=False,
+    )
+
+    # 11. Absolute Pose Graph Error (no LC)
+    plot_absolute_estimation_error(
+        estimated_poses=pose_graph_matrices,
+        gt_poses=gt_extrinsics,
+        frame_ids=frame_ids,
+        title_prefix="Bundle / Pose Graph (No LC)",
+        output_path=OUTPUT_DIR / "11_absolute_pose_graph_no_lc_error.png",
+        is_values=True,
+    )
+
+    # 12. Absolute Pose Graph LC Error
+    plot_absolute_estimation_error(
+        estimated_poses=pose_graph_lc_matrices,
+        gt_poses=gt_extrinsics,
+        frame_ids=frame_ids,
+        title_prefix="Pose Graph (With LC)",
+        output_path=OUTPUT_DIR / "12_absolute_pose_graph_with_lc_error.png",
+        is_values=True,
+    )
+
+    # 13. Relative error
+    plot_relative_estimation_error(
+        bundle_extrinsics=pose_graph_matrices,
+        pnp_extrinsics=pnp_extrinsics,
+        gt_extrinsics=gt_extrinsics,
+        frame_ids=frame_ids,
+        output_path=OUTPUT_DIR / "13_relative_error.png",
+    )
+
+    # 14. Relative error over subsections
+    from src.slam.visualization.final_plots import plot_relative_error_subsections_line
+    plot_relative_error_subsections_line(
+        estimated_poses=pose_graph_lc_matrices,
+        gt_poses=gt_extrinsics,
+        frame_ids=frame_ids,
+        title_prefix="Bundle",
+        output_path=OUTPUT_DIR / "14_relative_bundle_error_subsections.png",
+        is_c2w_list=True,
+    )
+    
+    # 15. LC Stats
+    from src.slam.visualization.final_plots import plot_loop_closure_stats
+    plot_loop_closure_stats(
+        lc_stats,
+        OUTPUT_DIR / "15_lc_matches.png",
+        OUTPUT_DIR / "16_lc_inliers.png"
+    )
+    
+    # 17. Uncertainty Size
+    from src.slam.visualization.final_plots import plot_uncertainty
+    plot_uncertainty(
+        versions_data,
+        lc_stats,
+        frame_ids,
+        OUTPUT_DIR / "17_uncertainty.png"
     )
 
     print("\n" + "=" * 60)
-    print(f"All analysis outputs saved to: {OUTPUT_DIR}")
+    print(f"All 17 analysis outputs saved to: {OUTPUT_DIR}")
     print("=" * 60)
 
 

@@ -3,21 +3,21 @@
 import cv2
 import numpy as np
 from gtsam.symbol_shorthand import C
-from slam.analysis.bundle_diagnostics import analyze_largest_initial_projection_factor
-from slam.analysis.track_reprojection import analyze_track_reprojection
-from slam.ba.gtsam_utils import make_gtsam_stereo_calibration
-from slam.ba.optimization import optimize_bundle_window
-from slam.ba.results import BundleWindowSolution
-from slam.ba.window_composition import (
+from src.slam.analysis.bundle_diagnostics import analyze_largest_initial_projection_factor
+from src.slam.analysis.track_reprojection import analyze_track_reprojection
+from src.slam.ba.gtsam_utils import make_gtsam_stereo_calibration
+from src.slam.ba.optimization import optimize_bundle_window
+from src.slam.ba.results import BundleWindowSolution
+from src.slam.ba.window_composition import (
     collect_landmarks_in_frame0,
     compose_keyframe_poses_in_frame0,
 )
-from slam.ba.window_selection import (
+from src.slam.ba.window_selection import (
     bundle_windows_from_keyframes,
     choose_keyframes_by_interval,
 )
-from slam.ba.window_solver import solve_all_bundle_windows
-from slam.config import (
+from src.slam.ba.window_solver import solve_all_bundle_windows
+from src.slam.config import (
     DB_PATH,
     EX5_OUTPUT_DIR,
     GLOBAL_CAMERA_MATRICES_PATH,
@@ -25,19 +25,19 @@ from slam.config import (
     LEFT_IMAGES_DIR,
     RIGHT_IMAGES_DIR,
 )
-from slam.geometry.transforms import (
+from src.slam.geometry.transforms import (
     camera_centers_from_world_to_camera_extrinsics,
 )
-from slam.io.calibration import read_stereo_calibration
-from slam.pipeline.database_pipeline import load_tracking_database
-from slam.visualization.ex5_plots import (
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.pipeline.database_pipeline import load_tracking_database
+from src.slam.visualization.ex5_plots import (
     plot_factor_errors_q5_1,
     plot_keyframe_localization_error,
     plot_keyframes_and_landmarks_top_down,
     plot_largest_factor_diagnostic,
     plot_reprojection_errors_q5_1,
 )
-from slam.visualization.trajectory import (
+from src.slam.visualization.trajectory import (
     plot_bundle_scene_3d,
     plot_bundle_scene_top_down,
 )

@@ -7,12 +7,12 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-from slam.ba.gtsam_utils import (
+from src.slam.ba.gtsam_utils import (
     pose3_from_world_to_camera_extrinsic,
     stereo_point_from_triplet,
     stereo_residual_norm,
 )
-from slam.tracking_database import TrackingDB
+from src.slam.tracking_database import TrackingDB
 
 LOGGER = logging.getLogger(__name__)
 

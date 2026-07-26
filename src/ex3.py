@@ -3,29 +3,29 @@ from pathlib import Path
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from slam.features.detectors import DEFAULT_ORB_NUM_FEATURES, FeatureType
-from slam.geometry.correspondences import find_common_points
-from slam.geometry.pnp import solve_pnp_safe
-from slam.geometry.projection import count_supporters
-from slam.geometry.ransac import ransac_pnp
-from slam.geometry.transforms import (
+from src.slam.features.detectors import DEFAULT_ORB_NUM_FEATURES, FeatureType
+from src.slam.geometry.correspondences import find_common_points
+from src.slam.geometry.pnp import solve_pnp_safe
+from src.slam.geometry.projection import count_supporters
+from src.slam.geometry.ransac import ransac_pnp
+from src.slam.geometry.transforms import (
     camera_centers_from_world_to_camera_extrinsics,
     compose_frame0_to_camera_extrinsics,
 )
-from slam.io.calibration import read_stereo_calibration
-from slam.io.poses import read_ground_truth_poses
-from slam.pipeline.stereo_pipeline import StereoPointCloud, create_stereo_point_cloud
-from slam.pipeline.temporal_pipeline import match_left_frames
-from slam.pipeline.tracking_pipeline import track_sequence
-from slam.visualization.ex3_plots import (
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.io.poses import read_ground_truth_poses
+from src.slam.pipeline.stereo_pipeline import StereoPointCloud, create_stereo_point_cloud
+from src.slam.pipeline.temporal_pipeline import match_left_frames
+from src.slam.pipeline.tracking_pipeline import track_sequence
+from src.slam.visualization.ex3_plots import (
     plot_four_image_matches,
     plot_task_3_3,
     plot_task_3_4,
     plot_task_3_5_matches,
     plot_task_3_5_point_clouds,
 )
-from slam.visualization.trajectory import plot_trajectory
-from slam.visualization.visualization import plot_point_cloud_on_axis
+from src.slam.visualization.trajectory import plot_trajectory
+from src.slam.visualization.visualization import plot_point_cloud_on_axis
 
 FRAME_0_INDEX = 0
 FRAME_1_INDEX = 1

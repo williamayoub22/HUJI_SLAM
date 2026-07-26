@@ -4,7 +4,7 @@ from time import perf_counter
 
 import gtsam
 import numpy as np
-from slam.database.facade import SlamDatabase
+from src.slam.database.facade import SlamDatabase
 
 from .optimization import optimize_bundle_window
 from .results import BundleWindowSolution
