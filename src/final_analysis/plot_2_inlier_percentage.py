@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR
+from src.ex8 import load_or_build_inlier_percentages
 def main():
     FINAL_ANALYSIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     inliers = load_or_build_inlier_percentages()
@@ -20,12 +21,3 @@ def main():
     plt.tight_layout()
     plt.savefig(FINAL_ANALYSIS_OUTPUT_DIR / "2_inlier_percentage_per_frame.png", dpi=150)
 if __name__ == "__main__": main()
-
-
-def load_or_build_inlier_percentages():
-    import numpy as np
-    from src.slam.config import PROJECT_DIR
-    inlier_path = PROJECT_DIR / "outputs" / "ex4" / "inlier_percentages.npy"
-    if not inlier_path.exists():
-        return np.ones(3300) * 100.0
-    return np.load(inlier_path)
