@@ -1,3 +1,4 @@
+
 """Adapters between KITTI-style stereo data, NumPy arrays, and GTSAM types."""
 
 import gtsam
@@ -133,3 +134,16 @@ def stereo_residual_norm(
     """
     residual = stereo_point_to_array(measurement) - stereo_point_to_array(projection)
     return float(np.linalg.norm(residual))
+
+
+
+def pose3_camera_to_world_to_extrinsic(pose):
+    """Convert a GTSAM camera-to-world Pose3 into a 3x4 world-to-camera matrix.
+
+    Bundle poses appear to represent camera poses in frame 0 because their
+    translations are used directly as camera positions. Projection requires
+    world-to-camera extrinsics, so the pose is inverted here.
+    """
+    camera_to_world = np.asarray(pose.matrix(), dtype=float)
+    world_to_camera = np.linalg.inv(camera_to_world)
+    return world_to_camera[:3, :]

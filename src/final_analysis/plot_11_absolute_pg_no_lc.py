@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
 from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
-from src.ex8 import load_or_build_pose_graph_with_lc
+from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc
 import gtsam
 
 def main():
@@ -13,7 +13,7 @@ def main():
     data = load_or_build_pose_graph_with_lc()
     est_matrices = data["pose_graph_matrices"]
     
-    from src.ex8 import load_or_build_pose_graph_no_lc
+    from src.slam.pipeline.caching import load_or_build_pose_graph_no_lc
     keyframe_ids = load_or_build_pose_graph_no_lc()["keyframe_ids"]
     
     est_poses = [gtsam.Pose3(gtsam.Rot3(m[:3,:3]), gtsam.Point3(m[:3,3])) for m in est_matrices]

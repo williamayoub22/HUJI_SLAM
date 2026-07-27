@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.ex8 import load_or_build_pose_graph_with_lc, load_or_build_db
+from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_db
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
 from src.slam.geometry.transforms import to_homogeneous_transform
 from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
@@ -30,7 +30,7 @@ def main():
     pg = pg_data["pose_graph_matrices"]
     pg_lc = pg_data["pose_graph_lc_matrices"]
     
-    from src.ex8 import load_or_build_pose_graph_no_lc
+    from src.slam.pipeline.caching import load_or_build_pose_graph_no_lc
     keyframe_ids = load_or_build_pose_graph_no_lc()["keyframe_ids"]
     
     # We need to extract the world_to_camera extrinsics from GT

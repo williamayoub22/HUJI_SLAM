@@ -1,3 +1,4 @@
+
 """Coordinate-transform utilities for camera extrinsics and trajectories."""
 
 from collections.abc import Sequence
@@ -133,3 +134,44 @@ def relative_world_to_camera_extrinsic(
     world_to_frame = to_homogeneous_transform(world_to_frame)
 
     return world_to_frame @ np.linalg.inv(world_to_reference)
+
+
+
+def get_relative_camera_transform(world_to_camera_by_frame, source_frame, target_frame):
+    """
+    Return the estimated transform from source-camera coordinates to
+    target-camera coordinates.
+
+    Given:
+        T_source_world: world -> source camera
+        T_target_world: world -> target camera
+
+    Then:
+        T_target_source =
+            T_target_world @ inverse(T_source_world)
+    """
+    source_world_to_camera = to_homogeneous_transform(world_to_camera_by_frame[source_frame])
+    target_world_to_camera = to_homogeneous_transform(world_to_camera_by_frame[target_frame])
+    return target_world_to_camera @ np.linalg.inv(source_world_to_camera)
+
+def compose_camera_transform(world_to_camera_by_frame, source_frame, target_frame):
+    """
+    Compose all consecutive estimated camera transforms from source_frame
+    to target_frame.
+
+    The returned transform maps a point from source-camera coordinates into
+    target-camera coordinates.
+    """
+    if source_frame == target_frame:
+        return np.eye(4, dtype=float)
+    step = 1 if target_frame > source_frame else -1
+    current_frame = source_frame
+    target_from_source = np.eye(4, dtype=float)
+    while current_frame != target_frame:
+        next_frame = current_frame + step
+        if current_frame not in world_to_camera_by_frame or next_frame not in world_to_camera_by_frame:
+            raise KeyError(f'Missing estimated camera pose for transition {current_frame} -> {next_frame}')
+        next_from_current = get_relative_camera_transform(world_to_camera_by_frame=world_to_camera_by_frame, source_frame=current_frame, target_frame=next_frame)
+        target_from_source = next_from_current @ target_from_source
+        current_frame = next_frame
+    return target_from_source

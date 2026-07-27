@@ -1,3 +1,19 @@
+from dataclasses import dataclass
+import gtsam
+import numpy as np
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.ba.gtsam_utils import make_gtsam_stereo_calibration
+from src.slam.config import GLOBAL_CAMERA_MATRICES_PATH
+from src.slam.ba.window_selection import choose_keyframes_by_motion
+from src.slam.ba.window_solver import solve_all_bundle_windows
+from src.slam.ba.results import BundleWindowSolution
+
+@dataclass
+class BundleAnalysisContext:
+    calibration: gtsam.Cal3_S2Stereo
+    keyframes: list[int]
+    solutions: list[BundleWindowSolution]
+
 """Diagnostics for inspecting bundle-adjustment projection factors."""
 
 from dataclasses import dataclass
@@ -12,7 +28,7 @@ from src.slam.ba.results import (
     BundleAdjustmentResult,
     ProjectionFactorMetadata,
 )
-from src.slam.tracking_database import TrackingDB
+from src.slam.database.tracking_database import TrackingDB
 
 
 @dataclass(frozen=True)
@@ -192,3 +208,104 @@ def analyze_largest_initial_projection_factor(
         initial=initial_evaluation,
         optimized=optimized_evaluation,
     )
+
+
+
+def _get_result_value(result, possible_names):
+    """Read a value from either a dictionary or a result object."""
+    for name in possible_names:
+        if isinstance(result, dict) and name in result:
+            return result[name]
+        if hasattr(result, name):
+            return getattr(result, name)
+    raise AttributeError(f'Could not find any of {possible_names} in bundle-window result.')
+
+def compute_bundle_window_factor_errors(bundle_results):
+    """Compute mean factor error before and after BA for each window.
+
+    Each result must contain:
+        - the window factor graph;
+        - the initial Values;
+        - the optimized Values.
+
+    The function supports several common field names so it can work with
+    either dictionaries or result objects.
+    """
+    window_ids = []
+    initial_mean_errors = []
+    optimized_mean_errors = []
+    for window_index, result in enumerate(bundle_results):
+        try:
+            graph = _get_result_value(result, ('graph', 'factor_graph', 'bundle_graph'))
+            initial_values = _get_result_value(result, ('initial_values', 'initial', 'initial_estimate'))
+            optimized_values = _get_result_value(result, ('optimized_values', 'result_values', 'optimized', 'solution'))
+            number_of_factors = int(graph.size())
+            if number_of_factors == 0:
+                continue
+            initial_total_error = float(graph.error(initial_values))
+            optimized_total_error = float(graph.error(optimized_values))
+            window_ids.append(window_index)
+            initial_mean_errors.append(initial_total_error / number_of_factors)
+            optimized_mean_errors.append(optimized_total_error / number_of_factors)
+        except (AttributeError, KeyError, ValueError, RuntimeError) as error:
+            print(f'WARNING: Could not compute errors for bundle window {window_index}: {error}')
+    return (np.asarray(window_ids, dtype=int), np.asarray(initial_mean_errors, dtype=float), np.asarray(optimized_mean_errors, dtype=float))
+
+def extract_bundle_window_average_errors(bundle_solutions):
+    """Extract normalized factor errors from solved BA windows."""
+    window_ids = []
+    initial_average_errors = []
+    final_average_errors = []
+    for window_index, solution in enumerate(bundle_solutions, start=1):
+        result = solution.result
+        if result.num_factors <= 0:
+            continue
+        initial_error = float(result.average_initial_error)
+        final_error = float(result.average_final_error)
+        if not np.isfinite(initial_error) or not np.isfinite(final_error):
+            continue
+        window_ids.append(window_index)
+        initial_average_errors.append(initial_error)
+        final_average_errors.append(final_error)
+    return (np.asarray(window_ids, dtype=int), np.asarray(initial_average_errors, dtype=float), np.asarray(final_average_errors, dtype=float))
+
+def compute_bundle_window_errors(bundle_solutions):
+    window_ids = []
+    initial_average_errors = []
+    final_average_errors = []
+    initial_median_proj_errors = []
+    final_median_proj_errors = []
+    for window_index, solution in enumerate(bundle_solutions, start=1):
+        result = solution.result
+        if result.num_factors <= 0:
+            continue
+        initial_error = float(result.average_initial_error)
+        final_error = float(result.average_final_error)
+        if not np.isfinite(initial_error) or not np.isfinite(final_error):
+            continue
+        init_proj_errors = []
+        final_proj_errors = []
+        for metadata in result.projection_factor_metadata:
+            factor = result.graph.at(metadata.factor_index)
+            e_init = factor.unwhitenedError(result.initial)
+            e_final = factor.unwhitenedError(result.optimized)
+            init_proj_errors.append(np.linalg.norm(e_init))
+            final_proj_errors.append(np.linalg.norm(e_final))
+        window_ids.append(window_index)
+        initial_average_errors.append(initial_error)
+        final_average_errors.append(final_error)
+        initial_median_proj_errors.append(np.median(init_proj_errors) if init_proj_errors else 0.0)
+        final_median_proj_errors.append(np.median(final_proj_errors) if final_proj_errors else 0.0)
+    return (np.asarray(window_ids, dtype=int), np.asarray(initial_average_errors, dtype=float), np.asarray(final_average_errors, dtype=float), np.asarray(initial_median_proj_errors, dtype=float), np.asarray(final_median_proj_errors, dtype=float))
+
+def prepare_bundle_adjustment_analysis(database) -> BundleAnalysisContext:
+    """Select motion-based keyframes and solve all BA windows once."""
+    P1, P2 = read_stereo_calibration()
+    calibration = make_gtsam_stereo_calibration(P1, P2)
+    pnp_extrinsics = np.asarray(np.load(GLOBAL_CAMERA_MATRICES_PATH), dtype=float)
+    keyframes = choose_keyframes_by_motion(poses=pnp_extrinsics, min_gap=11, max_gap=20, min_translation=5.0, min_rotation_deg=12.0, target_translation=5.0, target_rotation_deg=12.0)
+    print(f'Selected {len(keyframes)} motion-based keyframes.')
+    print(f'First keyframes: {keyframes[:10]}')
+    print(f'Last keyframes:  {keyframes[-10:]}')
+    solutions = solve_all_bundle_windows(slam_db=database, calibration=calibration, keyframes=keyframes, verbose=True)
+    return BundleAnalysisContext(calibration=calibration, keyframes=keyframes, solutions=solutions)

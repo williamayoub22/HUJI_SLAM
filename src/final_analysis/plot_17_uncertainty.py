@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.ex8 import load_or_build_pose_graph_with_lc
+from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR
 
 def main():

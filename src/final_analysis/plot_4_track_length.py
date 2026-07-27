@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from src.ex8 import load_or_build_db
+from src.slam.pipeline.caching import load_or_build_db
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR
 from tqdm import tqdm
 

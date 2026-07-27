@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from src.ex8 import load_or_build_loop_closures
+from src.slam.pipeline.caching import load_or_build_loop_closures
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR
 def main():
     FINAL_ANALYSIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
