@@ -1,3 +1,7 @@
+"""
+Provides pose graph diagnostics components and utilities for the SLAM pipeline.
+"""
+
 import numpy as np
 
 

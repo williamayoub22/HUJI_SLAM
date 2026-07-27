@@ -1,3 +1,7 @@
+"""
+Provides consensus components and utilities for the SLAM pipeline.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,23 +11,24 @@ import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
 
+from src.slam.geometry.correspondences import find_common_points
+from src.slam.geometry.projection import solve_pnp_safe
+from src.slam.geometry.ransac import ransac_pnp
 from src.slam.geometry.stereo import (
     make_gtsam_stereo_calibration,
     pose3_from_world_to_camera_extrinsic,
 )
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.loop_closure.candidates import LoopClosureCandidate
+from src.slam.pipeline.stereo_pipeline import StereoPointCloud, create_stereo_cloud
+from src.slam.pipeline.temporal_pipeline import match_left_frames
 from src.slam.pose_graph.constraints import symmetrize
 from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
     mahalanobis_squared,
 )
+
 from .. import config
-from src.slam.pipeline.stereo_pipeline import create_stereo_cloud, StereoPointCloud
-from src.slam.pipeline.temporal_pipeline import match_left_frames
-from src.slam.geometry.correspondences import find_common_points
-from src.slam.io.calibration import read_stereo_calibration
-from src.slam.geometry.ransac import ransac_pnp
-from src.slam.geometry.projection import solve_pnp_safe
-from src.slam.loop_closure.candidates import LoopClosureCandidate
 
 
 @dataclass(frozen=True)
@@ -172,7 +177,9 @@ class ConsensusMatcher:
                 source_to_target_transform=transform_ransac,
                 inlier_mask=inlier_mask,
                 success=False,
-                failure_reason=(f"Too few RANSAC inliers: {num_inliers} < {config.MIN_LOOP_INLIERS}"),
+                failure_reason=(
+                    f"Too few RANSAC inliers: {num_inliers} < {config.MIN_LOOP_INLIERS}"
+                ),
             )
 
         transform_refined = solve_pnp_safe(
@@ -200,4 +207,3 @@ class ConsensusMatcher:
             target_left=left1,
             target_right=right1,
         )
-

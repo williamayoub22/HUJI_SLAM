@@ -192,6 +192,7 @@ def count_supporters(
 
 import cv2
 
+
 def solve_pnp_safe(pts_3d, pts_2d, K, flags):
     try:
         success, rvec, tvec = cv2.solvePnP(pts_3d, pts_2d, K, None, flags=flags)

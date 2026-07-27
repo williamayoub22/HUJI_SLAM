@@ -1,15 +1,19 @@
+"""
+Provides temporal pipeline components and utilities for the SLAM pipeline.
+"""
+
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
 
+from .. import config
 from ..features.detectors import FeatureType
 from ..features.matching import (
     extract_and_match_features,
     get_matched_points,
 )
 from ..io.image_loader import read_images
-from .. import config
 
 
 @dataclass

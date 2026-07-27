@@ -5,11 +5,8 @@ import math
 import cv2
 import numpy as np
 
-from .projection import solve_pnp_safe
-from .projection import count_supporters
 from .. import config
-
-
+from .projection import count_supporters, solve_pnp_safe
 
 
 def _required_ransac_iterations(

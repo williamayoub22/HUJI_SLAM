@@ -1,28 +1,51 @@
+"""
+Unified Tracking Database Interface.
+
+This module provides the `SlamDatabase` and `TrackManager2D` facades which wrap the low-level 
+underlying tracking database implementation. It provides clean, high-level API methods for:
+- Querying track lengths and visibility.
+- Fetching specific (x_left, x_right, y) stereo observations.
+- Navigating the bipartite graph between Tracks and Frames.
+"""
+
 import pickle
+from typing import Optional
+
 import numpy as np
 from tqdm import tqdm
+
 from src.slam.geometry.triangulation import triangulate_opencv
+
 from .tracking_db import TrackingDB
+
 
 class Manager3D:
     def __init__(self):
         self._points = {}
+
     def add_point(self, track_id: int, point):
         self._points[track_id] = point
+
     def get_point(self, track_id: int):
         return self._points[track_id]
+
     def get_all_points(self):
         return self._points
+
 
 class ManagerPoses:
     def __init__(self):
         self._poses = {}
+
     def add_pose(self, frame_id: int, pose):
         self._poses[frame_id] = pose
+
     def get_pose(self, frame_id: int):
         return self._poses[frame_id]
+
     def get_all_poses(self):
         return self._poses
+
 
 class SlamDatabase:
     def __init__(self):
@@ -34,7 +57,7 @@ class SlamDatabase:
         data = {
             "manager_2d": self.manager_2d,
             "manager_3d": self.manager_3d,
-            "manager_poses": self.manager_poses
+            "manager_poses": self.manager_poses,
         }
         filename = base_filename + ".pkl"
         with open(filename, "wb") as file:
@@ -55,8 +78,8 @@ class SlamDatabase:
 
     def triangulate_all_tracks(self, P1: np.ndarray, P2: np.ndarray):
         """Triangulate all tracks using their initialization frame."""
-        print('Triangulating 3D points...')
-        for track_id in tqdm(self.manager_2d.all_tracks(), desc='Triangulating points'):
+        print("Triangulating 3D points...")
+        for track_id in tqdm(self.manager_2d.all_tracks(), desc="Triangulating points"):
             track_frames = self.manager_2d.frames(track_id)
             if len(track_frames) < 2:
                 continue

@@ -1,7 +1,13 @@
+"""
+Provides plot 17 uncertainty components and utilities for the SLAM pipeline.
+"""
+
 import numpy as np
-from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_loop_closures
+
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR
+from src.slam.pipeline.caching import load_or_build_loop_closures, load_or_build_pose_graph_with_lc
 from src.slam.project_visualization.plot_helpers import plot_uncertainty
+
 
 def main():
     FINAL_ANALYSIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -21,4 +27,6 @@ def main():
         output_path=FINAL_ANALYSIS_OUTPUT_DIR / "17_uncertainty.png",
     )
 
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    main()

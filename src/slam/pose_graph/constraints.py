@@ -1,8 +1,13 @@
+"""
+Provides constraints components and utilities for the SLAM pipeline.
+"""
+
 from dataclasses import dataclass
 
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C
+
 from src.slam.bundle_adjustment.types import BundleWindowSolution
 
 

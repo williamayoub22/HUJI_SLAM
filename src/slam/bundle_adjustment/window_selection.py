@@ -3,8 +3,8 @@
 from collections.abc import Sequence
 
 import numpy as np
-from src.slam.data.tracking_db import TrackingDB
 
+from src.slam.data.tracking_db import TrackingDB
 from src.slam.geometry.stereo import pose3_from_world_to_camera_extrinsic
 
 # 1. Choose keyframes by motion:

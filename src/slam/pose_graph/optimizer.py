@@ -1,8 +1,12 @@
+"""
+Provides optimizer components and utilities for the SLAM pipeline.
+"""
+
 import time
+from dataclasses import dataclass
 
 import gtsam
 
-from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class PoseGraphResult:
@@ -56,5 +60,3 @@ def optimize_pose_graph(
         initial_error=initial_error,
         final_error=final_error,
     )
-
-

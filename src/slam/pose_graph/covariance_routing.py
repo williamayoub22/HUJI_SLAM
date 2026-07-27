@@ -1,3 +1,7 @@
+"""
+Provides covariance routing components and utilities for the SLAM pipeline.
+"""
+
 from __future__ import annotations
 
 import heapq
@@ -6,6 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 import numpy as np
+
 from src.slam.pose_graph.constraints import symmetrize
 
 

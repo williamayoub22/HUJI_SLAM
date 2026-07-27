@@ -1,3 +1,7 @@
+"""
+Provides graph builder components and utilities for the SLAM pipeline.
+"""
+
 from dataclasses import dataclass
 
 import gtsam

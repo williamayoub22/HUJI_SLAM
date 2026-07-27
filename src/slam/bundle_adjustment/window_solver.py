@@ -1,15 +1,26 @@
-"""Solve independent local bundle-adjustment problems over keyframe windows."""
+"""Bundle Adjustment Sliding Window Solver.
+
+This module provides the core non-linear optimization engine for local Visual Odometry.
+It constructs a GTSAM Factor Graph for a sliding window of stereo frames and their shared 
+3D landmarks, optimizing both camera poses and 3D points simultaneously to minimize reprojection error.
+
+Key algorithms:
+- `LevenbergMarquardtOptimizer` configuration for robust outlier rejection.
+- Outlier filtering based on projection thresholds.
+- Schur Complement application for efficient BA solving.
+"""
 
 from time import perf_counter
 
 import gtsam
 import numpy as np
+
 from src.slam.data.db_facade import SlamDatabase
 
+from .. import config
 from .optimizer import optimize_bundle_window
 from .types import BundleWindowSolution
 from .window_selection import bundle_windows_from_keyframes
-from .. import config
 
 
 def solve_all_bundle_windows(
@@ -40,9 +51,9 @@ def solve_all_bundle_windows(
 
     solutions: list[BundleWindowSolution] = []
     total_windows = len(windows)
-    
+
     from tqdm import tqdm
-    
+
     # Disable verbose since we are using tqdm
     iterator = tqdm(windows, total=total_windows, desc="Solving BA Windows") if verbose else windows
 

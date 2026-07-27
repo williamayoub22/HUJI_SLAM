@@ -1,15 +1,19 @@
+"""
+Provides stereo pipeline components and utilities for the SLAM pipeline.
+"""
+
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
 
-from ..features.matching import get_matched_points
+from .. import config
+from ..features.detectors import FeatureType
+from ..features.matching import extract_and_match_features, get_matched_points
 from ..geometry.triangulation import triangulate_dlt, triangulate_opencv
 from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import read_images
-from ..features.detectors import FeatureType
-from ..features.matching import extract_and_match_features
-from .. import config
+
 
 @dataclass
 class StereoMatchData:
@@ -84,14 +88,18 @@ def load_matches_between_images(
     )
 
 
-def load_frame_data(frame_id: int, ratio_threshold: float = config.STEREO_RATIO_THRESHOLD) -> StereoMatchData:
+def load_frame_data(
+    frame_id: int, ratio_threshold: float = config.STEREO_RATIO_THRESHOLD
+) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-    left_keypoints, right_keypoints, left_image, right_image, left_descriptors, matches = load_matches_between_images(
-        frame_id,
-        feature_type=config.FEATURE_TYPE,
-        num_features=config.NUM_FEATURES,
-        ratio_threshold=ratio_threshold,
-        use_ratio_test=True,
+    left_keypoints, right_keypoints, left_image, right_image, left_descriptors, matches = (
+        load_matches_between_images(
+            frame_id,
+            feature_type=config.FEATURE_TYPE,
+            num_features=config.NUM_FEATURES,
+            ratio_threshold=ratio_threshold,
+            use_ratio_test=True,
+        )
     )
     left_pts, right_pts = get_matched_points(left_keypoints, right_keypoints, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
@@ -185,5 +193,3 @@ def create_stereo_cloud(
         right_inliers=right_inliers,
         points_3d=points_3d,
     )
-
-

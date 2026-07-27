@@ -5,8 +5,6 @@ from dataclasses import dataclass
 import numpy as np
 
 
-
-
 @dataclass(frozen=True)
 class FourViewCorrespondences:
     """Matched observations of landmarks across two consecutive stereo pairs.

@@ -1,3 +1,7 @@
+"""
+Provides refinement components and utilities for the SLAM pipeline.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,17 +15,18 @@ from src.slam.geometry.stereo import (
     make_gtsam_stereo_calibration,
     pose3_from_world_to_camera_extrinsic,
 )
+from src.slam.io.calibration import read_stereo_calibration
+from src.slam.loop_closure.consensus import ConsensusMatchResult
 from src.slam.pose_graph.constraints import symmetrize
 from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
     mahalanobis_squared,
 )
-from .. import config
-from src.slam.io.calibration import read_stereo_calibration
-from src.slam.loop_closure.consensus import ConsensusMatchResult
 
+from .. import config
 
 SOURCE_POSE_PRIOR_SIGMA = config.SOURCE_POSE_PRIOR_SIGMA
+
 
 @dataclass(frozen=True)
 class RelativePoseEstimate:
@@ -214,5 +219,3 @@ def refine_relative_pose_with_bundle_adjustment(
         final_error=final_error,
         num_landmarks=len(points_3d),
     )
-
-

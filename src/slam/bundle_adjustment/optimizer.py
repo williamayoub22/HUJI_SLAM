@@ -3,10 +3,11 @@
 import gtsam
 import numpy as np
 
-from .. import config
 from src.slam.bundle_adjustment.graph_builder import build_local_bundle_graph
 from src.slam.bundle_adjustment.types import BundleAdjustmentResult
 from src.slam.data.db_facade import SlamDatabase
+
+from .. import config
 
 
 def _validate_graph_keys(

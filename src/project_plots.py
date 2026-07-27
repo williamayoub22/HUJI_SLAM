@@ -1,3 +1,18 @@
+"""
+Main entry point for generating all project visualizations and running the full SLAM pipeline.
+
+This script sequentially executes all 18 plotting modules to generate the final analysis graphs.
+It is completely unified and handles caching implicitly:
+1. It first prints tracking database statistics matching Table 1 of the report.
+2. It then iterates through all `plot_*` scripts.
+3. Heavy computational results (like DB tracking, bundle adjustment, and pose graph optimization) 
+   are automatically cached in the `outputs/cache/` directory so plotting is nearly instantaneous 
+   on subsequent runs.
+
+Outputs:
+    Saves 18 high-resolution PNG plots to `outputs/final_analysis/`.
+"""
+
 from src.slam.project_visualization import (
     plot_1_matches,
     plot_2_inlier_percentage,
@@ -18,12 +33,55 @@ from src.slam.project_visualization import (
     plot_17_uncertainty,
 )
 
+
 def print_header(plot_num):
     print("\n" + "#" * 60)
     print(f"# Running plot {plot_num}...")
     print("#" * 60)
 
+
+import numpy as np
+
+from src.slam.pipeline.caching import load_or_build_db
+
+
+def print_tracking_statistics():
+    print("\n" + "=" * 50)
+    print("Table 1: Tracking database statistics.")
+    print("=" * 50)
+
+    db = load_or_build_db()
+    manager = db.manager_2d
+    frames = sorted(manager.all_frames())
+    num_frames = len(frames)
+
+    tracks = manager.all_tracks()
+    num_tracks = len(tracks)
+
+    track_lengths = [len(manager.frames(t)) for t in tracks]
+    mean_track_length = np.mean(track_lengths) if track_lengths else 0
+
+    connectivity = []
+    for i in range(len(frames) - 1):
+        f1, f2 = frames[i], frames[i + 1]
+        t1 = set(manager.tracks(f1))
+        t2 = set(manager.tracks(f2))
+        connectivity.append(len(t1.intersection(t2)))
+    mean_connectivity = np.mean(connectivity) if connectivity else 0
+
+    print(f"{'Statistic':<30} | {'Value':>15}")
+    print("-" * 50)
+    print(f"{'Number of frames':<30} | {num_frames:>15}")
+    print(f"{'Number of tracks':<30} | {num_tracks:>15}")
+    print(f"{'Mean track length':<30} | {mean_track_length:>15.2f}")
+    print(f"{'Mean frame connectivity':<30} | {mean_connectivity:>15.2f}")
+    print("=" * 50 + "\n")
+
+
 def main():
+    print("Computing general tracking statistics...")
+    print_tracking_statistics()
+
     print_header(1)
     plot_1_matches.main()
     print_header(2)
@@ -59,6 +117,7 @@ def main():
     print_header(17)
     plot_17_uncertainty.main()
     print("\nAll plots generated successfully!")
+
 
 if __name__ == "__main__":
     main()

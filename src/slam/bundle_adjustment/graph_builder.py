@@ -20,19 +20,19 @@
 
 import gtsam
 import numpy as np
-
-from .. import config
 from gtsam.symbol_shorthand import C, Q
-from src.slam.data.db_facade import SlamDatabase
 
-from ..geometry.transforms import (
-    relative_world_to_camera_extrinsic,
-    to_homogeneous_transform,
-)
+from src.slam.data.db_facade import SlamDatabase
 from src.slam.geometry.stereo import (
     make_stereo_camera,
     pose3_from_world_to_camera_extrinsic,
     stereo_point_from_triplet,
+)
+
+from .. import config
+from ..geometry.transforms import (
+    relative_world_to_camera_extrinsic,
+    to_homogeneous_transform,
 )
 from .types import ProjectionFactorMetadata
 from .window_selection import collect_window_tracks
@@ -87,7 +87,7 @@ def build_local_bundle_graph(
 
     # find the first frame from the current ba window
     first_frame = window_frames[0]
-    
+
     # from ex3. here we select the first R|t matrix for the first
     # frame in the bundle
     T_world_to_first = slam_db.manager_poses.get_pose(first_frame)
@@ -192,7 +192,9 @@ def build_local_bundle_graph(
         inserted_landmarks.append(track_id)
 
         for frame_id in track_frames:
-            measurement = stereo_point_from_triplet(slam_db.manager_2d.link_triplet(frame_id, track_id))
+            measurement = stereo_point_from_triplet(
+                slam_db.manager_2d.link_triplet(frame_id, track_id)
+            )
 
             factor_index = graph.size()
 

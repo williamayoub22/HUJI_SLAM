@@ -8,17 +8,17 @@ import gtsam
 import numpy as np
 from tqdm import tqdm
 
+from src.slam import config
 from src.slam.data.db_facade import SlamDatabase
 from src.slam.data.tracking_db import Link, TrackingDB
 from src.slam.features.detectors import FeatureType, extract_features
 from src.slam.features.matching import match_and_filter
 from src.slam.geometry.ransac import ransac_pnp
+from src.slam.geometry.stereo import make_gtsam_stereo_calibration
 from src.slam.geometry.transforms import to_homogeneous_transform
 from src.slam.geometry.triangulation import triangulate_opencv
 from src.slam.io.calibration import read_stereo_calibration
 from src.slam.io.image_loader import read_images
-from src.slam import config
-from src.slam.geometry.stereo import make_gtsam_stereo_calibration
 from src.slam.pipeline.frame_processing import process_stereo_frame, track_between_frames
 
 
@@ -361,15 +361,15 @@ def build_database():
     K = P1[:, :3]
     calibration = make_gtsam_stereo_calibration(P1, P2)
 
-    db_path = config.CACHE_DIR / 'slam_db'
-    full_db_path = config.CACHE_DIR / 'slam_db.pkl'
+    db_path = config.CACHE_DIR / "slam_db"
+    full_db_path = config.CACHE_DIR / "slam_db.pkl"
 
     if full_db_path.exists():
-        print(f'Loading database from {full_db_path}...')
+        print(f"Loading database from {full_db_path}...")
         slam_db = SlamDatabase.load(str(db_path))
         return slam_db, calibration
 
-    print('Building database from scratch...')
+    print("Building database from scratch...")
     slam_db = SlamDatabase()
 
     total_frames = len(list((config.SEQUENCE_DIR / "image_0").glob("*.png")))
@@ -380,17 +380,14 @@ def build_database():
 
     prev_frame_data = process_stereo_frame(0, P1, P2)
     slam_db.manager_2d.add_frame(
-        links=prev_frame_data.links,
-        left_features=prev_frame_data.left_features
+        links=prev_frame_data.links, left_features=prev_frame_data.left_features
     )
 
-    for frame_idx in tqdm(range(1, total_frames), desc='Building SLAM Database'):
+    for frame_idx in tqdm(range(1, total_frames), desc="Building SLAM Database"):
         cur_frame_data = process_stereo_frame(frame_idx, P1, P2)
-        
-        tracking_result = track_between_frames(
-            prev_frame_data, cur_frame_data, K, P1, P2
-        )
-        
+
+        tracking_result = track_between_frames(prev_frame_data, cur_frame_data, K, P1, P2)
+
         inlier_percentages.append(tracking_result.inlier_ratio)
 
         step_T = to_homogeneous_transform(tracking_result.relative_pose)
@@ -402,15 +399,18 @@ def build_database():
             links=cur_frame_data.links,
             left_features=cur_frame_data.left_features,
             matches_to_previous_left=tracking_result.matches,
-            inliers=tracking_result.inliers
+            inliers=tracking_result.inliers,
         )
-        
+
         prev_frame_data = cur_frame_data
 
     slam_db.triangulate_all_tracks(P1, P2)
-    
+
     slam_db.serialize(str(db_path))
-    np.save(config.CACHE_DIR / 'global_camera_matrices.npy', np.array(global_camera_matrices, dtype=float))
-    np.save(config.CACHE_DIR / 'inlier_percentages.npy', np.array(inlier_percentages, dtype=float))
+    np.save(
+        config.CACHE_DIR / "global_camera_matrices.npy",
+        np.array(global_camera_matrices, dtype=float),
+    )
+    np.save(config.CACHE_DIR / "inlier_percentages.npy", np.array(inlier_percentages, dtype=float))
 
     return slam_db, calibration

@@ -1,3 +1,7 @@
+"""
+Provides candidates components and utilities for the SLAM pipeline.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,6 +20,7 @@ from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
     mahalanobis_squared,
 )
+
 from .. import config
 
 

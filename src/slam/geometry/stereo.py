@@ -1,4 +1,3 @@
-
 """Adapters between KITTI-style stereo data, NumPy arrays, and GTSAM types."""
 
 import gtsam
@@ -134,7 +133,6 @@ def stereo_residual_norm(
     """
     residual = stereo_point_to_array(measurement) - stereo_point_to_array(projection)
     return float(np.linalg.norm(residual))
-
 
 
 def pose3_camera_to_world_to_extrinsic(pose):

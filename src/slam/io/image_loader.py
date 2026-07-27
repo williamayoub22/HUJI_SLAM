@@ -4,7 +4,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from src.slam.config import LEFT_IMAGES_DIR, RIGHT_IMAGES_DIR
+
 from src.slam.config import LEFT_IMAGES_DIR, RIGHT_IMAGES_DIR
 
 DEFAULT_FRAME_INDEX = 0
@@ -46,4 +46,3 @@ def read_images(
         )
 
     return left_image, right_image
-
