@@ -40,20 +40,15 @@ def solve_all_bundle_windows(
 
     solutions: list[BundleWindowSolution] = []
     total_windows = len(windows)
+    
+    from tqdm import tqdm
+    
+    # Disable verbose since we are using tqdm
+    iterator = tqdm(windows, total=total_windows, desc="Solving BA Windows") if verbose else windows
 
-    for window_index, window_frames in enumerate(windows, start=1):
+    for window_frames in iterator:
         start_frame = window_frames[0]
         end_frame = window_frames[-1]
-
-        if verbose:
-            print(
-                f"Window {window_index}/{total_windows}: "
-                f"{start_frame} -> {end_frame} "
-                f"({len(window_frames)} frames)...",
-                flush=True,
-            )
-
-        start_time = perf_counter()
 
         result = optimize_bundle_window(
             slam_db=slam_db,
@@ -63,8 +58,6 @@ def solve_all_bundle_windows(
             measurement_sigma_pixels=config.MEASUREMENT_SIGMA_PIXELS,
         )
 
-        elapsed_seconds = perf_counter() - start_time
-
         solutions.append(
             BundleWindowSolution(
                 start_frame=start_frame,
@@ -72,15 +65,5 @@ def solve_all_bundle_windows(
                 result=result,
             )
         )
-
-        if verbose:
-            print(
-                f"      done in {elapsed_seconds:.1f}s | "
-                f"poses={len(window_frames)} | "
-                f"landmarks={len(result.track_ids)} | "
-                f"factors={result.num_factors} | "
-                f"error={result.initial_error:.1f} -> {result.final_error:.1f}",
-                flush=True,
-            )
 
     return solutions

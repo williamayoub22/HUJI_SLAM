@@ -29,9 +29,9 @@ def main():
         err_z.append(np.abs(dt[2]))
         err_norm.append(np.linalg.norm(dt))
         
-        # Angle error
+        # Angle error: Rodrigues axis-angle magnitude (norm of logmap = theta)
         R_err = est_poses[i].rotation().between(gt_poses[i].rotation())
-        err_angle.append(np.abs(R_err.axisAngle()[1]) * 180.0 / np.pi)
+        err_angle.append(np.linalg.norm(gtsam.Rot3.Logmap(R_err)) * 180.0 / np.pi)
         
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
     ax1.plot(err_x, label="x", linewidth=0.5)

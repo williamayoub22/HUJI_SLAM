@@ -23,24 +23,31 @@ def solve_bundle_windows_and_extract_constraints(
     slam_db: SlamDatabase,
     calibration,
     verbose: bool = True,
+    bundle_solutions=None,
+    keyframes=None,
 ):
     """Solve local BA windows and convert each optimized window into
     one relative keyframe constraint for the pose graph.
+
+    If bundle_solutions and keyframes are provided (from a prior cache),
+    they are used directly and solve_all_bundle_windows is skipped.
     """
-    poses = [slam_db.manager_poses.get_pose(i) for i in range(len(slam_db.manager_poses.get_all_poses()))]
-    keyframes = choose_keyframes_by_motion(poses=np.array(poses))
-
-    if verbose:
-        print(f"Selected {len(keyframes)} motion-based keyframes.")
-        print(f"First keyframes: {keyframes[:10]}")
-        print(f"Last keyframes:  {keyframes[-10:]}")
-
-    bundle_solutions = solve_all_bundle_windows(
-        slam_db=slam_db,
-        calibration=calibration,
-        keyframes=keyframes,
-        verbose=verbose,
-    )
+    if bundle_solutions is None or keyframes is None:
+        poses = [slam_db.manager_poses.get_pose(i) for i in range(len(slam_db.manager_poses.get_all_poses()))]
+        keyframes = choose_keyframes_by_motion(poses=np.array(poses))
+        if verbose:
+            print(f"Selected {len(keyframes)} motion-based keyframes.")
+            print(f"First keyframes: {keyframes[:10]}")
+            print(f"Last keyframes:  {keyframes[-10:]}")
+        bundle_solutions = solve_all_bundle_windows(
+            slam_db=slam_db,
+            calibration=calibration,
+            keyframes=keyframes,
+            verbose=verbose,
+        )
+    else:
+        if verbose:
+            print(f"Reusing {len(bundle_solutions)} pre-computed BA window solutions ({len(keyframes)} keyframes).")
 
     constraints = [extract_relative_pose_constraint(solution) for solution in bundle_solutions]
 
@@ -48,17 +55,24 @@ def solve_bundle_windows_and_extract_constraints(
 
 
 
-def _build_pg_no_lc():
+def _build_pg_no_lc(bundle_solutions=None, keyframes=None):
     """Section 7.1: detect loop-closure candidates using an empirically
     calibrated Mahalanobis threshold.
 
     The threshold was selected offline as the smallest value that retained
     at least 90% of temporally nonlocal pairs within 5 m and 20 degrees,
     while keeping the number of consensus-matching attempts small.
+
+    Args:
+        bundle_solutions: Pre-computed BA window solutions (from bundle_windows cache).
+            If provided, skips re-running solve_all_bundle_windows.
+        keyframes: Keyframe indices corresponding to bundle_solutions.
     """
-    keyframe_step = 10
     slam_db, calibration = build_database()
-    _, constraints = solve_bundle_windows_and_extract_constraints(slam_db=slam_db, calibration=calibration, verbose=True)
+    _, constraints = solve_bundle_windows_and_extract_constraints(
+        slam_db=slam_db, calibration=calibration, verbose=True,
+        bundle_solutions=bundle_solutions, keyframes=keyframes,
+    )
     if not constraints:
         raise RuntimeError('No relative-pose constraints were extracted.')
     first_frame = constraints[0].start_frame

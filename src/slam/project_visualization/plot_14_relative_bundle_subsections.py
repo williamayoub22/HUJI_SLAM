@@ -1,6 +1,5 @@
 import numpy as np
-from dataclasses import dataclass
-from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_pose_graph_no_lc
+from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_pose_graph_no_lc, load_or_build_subsection_pairs
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
 from src.slam.project_visualization.plot_helpers import plot_relative_error_subsections_line
 
@@ -10,12 +9,12 @@ def main():
     pose_graph_lc_matrices = pg_data["pose_graph_lc_matrices"]
     
     gt_extrinsics = np.loadtxt(GT_POSES_PATH).reshape(-1, 3, 4)
-    frame_ids = load_or_build_pose_graph_no_lc()["keyframe_ids"]
+    subsection_pairs = load_or_build_subsection_pairs(lengths=(100, 400, 800))
     
     plot_relative_error_subsections_line(
         estimated_poses=pose_graph_lc_matrices,
         gt_poses=gt_extrinsics,
-        frame_ids=frame_ids,
+        subsection_pairs=subsection_pairs,
         title_prefix="Bundle",
         output_path=FINAL_ANALYSIS_OUTPUT_DIR / "14_relative_bundle_error_subsections.png",
         is_c2w_list=True,

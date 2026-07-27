@@ -78,12 +78,12 @@ def compute_absolute_errors(estimated_poses, gt_poses, frame_ids, is_c2w_list=Fa
     err_z = pos_est[:, 2] - pos_gt[:, 2]
     err_norm = np.linalg.norm(pos_est - pos_gt, axis=1)
 
-    # Angle error
+    # Angle error: use Rodrigues axis-angle magnitude (norm of logmap = theta)
     err_angle = []
     for i in range(len(frame_ids)):
         r_gt = angles_gt[i]
         r_est = angles_est[i]
-        err_angle.append(np.linalg.norm(r_gt.between(r_est).xyz()) * 180.0 / np.pi)
+        err_angle.append(np.linalg.norm(r_gt.between(r_est).logmap()) * 180.0 / np.pi)
     
     return err_x, err_y, err_z, err_norm, err_angle
 
@@ -145,10 +145,11 @@ def plot_relative_estimation_error(bundle_extrinsics, pnp_extrinsics, gt_extrins
 
     for i in range(len(rel_gt)):
         err_bundle_norm.append(np.linalg.norm(rel_gt[i].translation() - rel_bundle[i].translation()))
-        err_bundle_angle.append(np.linalg.norm(rel_gt[i].rotation().between(rel_bundle[i].rotation()).xyz()) * 180.0 / np.pi)
+        # Rodrigues axis-angle magnitude (norm of logmap = theta)
+        err_bundle_angle.append(np.linalg.norm(rel_gt[i].rotation().between(rel_bundle[i].rotation()).logmap()) * 180.0 / np.pi)
         
         err_pnp_norm.append(np.linalg.norm(rel_gt[i].translation() - rel_pnp[i].translation()))
-        err_pnp_angle.append(np.linalg.norm(rel_gt[i].rotation().between(rel_pnp[i].rotation()).xyz()) * 180.0 / np.pi)
+        err_pnp_angle.append(np.linalg.norm(rel_gt[i].rotation().between(rel_pnp[i].rotation()).logmap()) * 180.0 / np.pi)
 
     plt.figure(figsize=(12, 8))
     plt.subplot(2, 1, 1)
@@ -172,70 +173,87 @@ def plot_relative_estimation_error(bundle_extrinsics, pnp_extrinsics, gt_extrins
     plt.savefig(output_path, dpi=200)
     plt.close()
 
-def plot_relative_error_subsections_line(estimated_poses, gt_poses, frame_ids, title_prefix, output_path: Path, is_c2w_list=False):
-    lengths = [100, 400, 800]
-    
-    # Precompute all consecutive GT distances
-    consec_dist = np.zeros(len(frame_ids) - 1)
-    for i in range(len(frame_ids) - 1):
-        T1 = gt_poses[frame_ids[i]]
-        T2 = gt_poses[frame_ids[i+1]]
-        p1 = gtsam.Pose3(gtsam.Rot3(T1[:3, :3].T), gtsam.Point3(-T1[:3, :3].T @ T1[:3, 3]))
-        p2 = gtsam.Pose3(gtsam.Rot3(T2[:3, :3].T), gtsam.Point3(-T2[:3, :3].T @ T2[:3, 3]))
-        consec_dist[i] = np.linalg.norm(p1.between(p2).translation())
-        
-    cum_dist = np.insert(np.cumsum(consec_dist), 0, 0)
-    
+def plot_relative_error_subsections_line(estimated_poses, gt_poses, subsection_pairs, title_prefix, output_path: Path, is_c2w_list=False):
+    """Plot relative estimation error for sequence lengths 100, 400, 800.
+
+    Args:
+        subsection_pairs: dict {length: [(i, j, frame_id_i, frame_id_j), ...]}
+            Precomputed from caching.load_or_build_subsection_pairs().
+            Each pair is the exact keyframe indices/IDs for that sequence length.
+    """
+    lengths = sorted(subsection_pairs.keys())
+
+    # Precompute cumulative GT arc-length for each keyframe in subsection_pairs
+    # We need all unique frame_ids that appear as endpoints
+    all_frame_ids = sorted({fid for pairs in subsection_pairs.values() for (_, _, fi, fj) in pairs for fid in (fi, fj)})
+    all_frame_ids_set = set(all_frame_ids)
+
+    # Build cumulative distance up to each frame index using consecutive GT steps
+    max_fid = max(all_frame_ids) + 1
+    # Map frame_id -> cumulative distance from frame 0
+    cum_dist_by_fid: dict[int, float] = {}
+    running = 0.0
+    prev_fid = None
+    for fid in range(max_fid):
+        if prev_fid is not None:
+            T1 = gt_poses[prev_fid]
+            T2 = gt_poses[fid]
+            p1 = gtsam.Pose3(gtsam.Rot3(T1[:3, :3].T), gtsam.Point3(-T1[:3, :3].T @ T1[:3, 3]))
+            p2 = gtsam.Pose3(gtsam.Rot3(T2[:3, :3].T), gtsam.Point3(-T2[:3, :3].T @ T2[:3, 3]))
+            running += np.linalg.norm(p1.between(p2).translation())
+        if fid in all_frame_ids_set:
+            cum_dist_by_fid[fid] = running
+        prev_fid = fid
+
     plt.figure(figsize=(12, 10))
-    
+
     for plot_idx, metric in enumerate(["Location", "Angle"]):
         plt.subplot(2, 1, plot_idx + 1)
         for length in lengths:
             x_vals = []
             y_vals = []
-            for i in range(0, len(frame_ids) - length):
-                start_fid = frame_ids[i]
-                end_fid = frame_ids[i + length]
-                
-                T1_gt = gt_poses[start_fid]
-                T2_gt = gt_poses[end_fid]
+            for (i, j, frame_id_i, frame_id_j) in subsection_pairs[length]:
+                T1_gt = gt_poses[frame_id_i]
+                T2_gt = gt_poses[frame_id_j]
                 p1_gt = gtsam.Pose3(gtsam.Rot3(T1_gt[:3, :3].T), gtsam.Point3(-T1_gt[:3, :3].T @ T1_gt[:3, 3]))
                 p2_gt = gtsam.Pose3(gtsam.Rot3(T2_gt[:3, :3].T), gtsam.Point3(-T2_gt[:3, :3].T @ T2_gt[:3, 3]))
                 rel_gt = p1_gt.between(p2_gt)
-                
+
                 if is_c2w_list:
                     p1_est = gtsam.Pose3(estimated_poses[i])
-                    p2_est = gtsam.Pose3(estimated_poses[i+length])
+                    p2_est = gtsam.Pose3(estimated_poses[j])
                 else:
-                    T1_est = estimated_poses[start_fid]
-                    T2_est = estimated_poses[end_fid]
+                    T1_est = estimated_poses[frame_id_i]
+                    T2_est = estimated_poses[frame_id_j]
                     p1_est = gtsam.Pose3(gtsam.Rot3(T1_est[:3, :3].T), gtsam.Point3(-T1_est[:3, :3].T @ T1_est[:3, 3]))
                     p2_est = gtsam.Pose3(gtsam.Rot3(T2_est[:3, :3].T), gtsam.Point3(-T2_est[:3, :3].T @ T2_est[:3, 3]))
                 rel_est = p1_est.between(p2_est)
-                
+
                 error_pose = rel_est.between(rel_gt)
-                
-                total_dist = cum_dist[i + length] - cum_dist[i]
+
+                total_dist = cum_dist_by_fid[frame_id_j] - cum_dist_by_fid[frame_id_i]
                 if total_dist > 0:
                     if metric == "Location":
-                        val = (np.linalg.norm(error_pose.translation()) / total_dist) * 100.0 # percentage
+                        val = (np.linalg.norm(error_pose.translation()) / total_dist) * 100.0
                     else:
-                        val = (np.linalg.norm(error_pose.rotation().xyz()) * 180.0 / np.pi) / total_dist # deg/m
-                    x_vals.append(start_fid)
+                        # Rodrigues axis-angle magnitude (norm of logmap = theta)
+                        val = (np.linalg.norm(gtsam.Rot3.Logmap(error_pose.rotation())) * 180.0 / np.pi) / total_dist
+                    x_vals.append(frame_id_i)
                     y_vals.append(val)
-                    
+
             plt.plot(x_vals, y_vals, label=f"{length}", linewidth=0.5)
-            
+
         plt.xlabel("Frame Number")
         plt.ylabel(f"Total {metric} error norm (measure as error%: m/m)" if metric == "Location" else f"{metric} error (measure as deg/m)")
         plt.title(f"Relative {title_prefix} estimation error over sub-sections: {metric}")
         plt.grid(True, alpha=0.3)
         plt.legend(title="Sequence Length")
-        
+
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=200)
     plt.close()
+
 
 def plot_loop_closure_stats(lc_stats, matches_out_path: Path, inliers_out_path: Path):
     if not lc_stats:
@@ -282,29 +300,42 @@ def plot_uncertainty(versions_data, lc_stats, keyframe_ids, output_path: Path):
     lc_targets = [s["target_frame"] for s in lc_stats] if lc_stats else []
     
     plt.figure(figsize=(12, 10))
+    # --- Location Uncertainty ---
+    det_ba_loc = [safe_log_det(covs_ba[kf][3:6, 3:6]) for kf in keyframe_ids]
+    det_lc_loc = [safe_log_det(covs_lc[kf][3:6, 3:6]) for kf in keyframe_ids]
     
-    # Location Uncertainty (Translation block [3:6, 3:6])
+    # Shift to start at 0
+    det_ba_loc = np.array(det_ba_loc) - det_ba_loc[0]
+    det_lc_loc = np.array(det_lc_loc) - det_lc_loc[0]
+
+    plt.figure(figsize=(14, 10))
     plt.subplot(2, 1, 1)
-    uncert_ba = [safe_log_det(covs_ba[fid][3:6, 3:6]) for fid in keyframe_ids]
-    uncert_lc = [safe_log_det(covs_lc[fid][3:6, 3:6]) for fid in keyframe_ids]
-    plt.plot(keyframe_ids, uncert_ba, label="uncertainty score BA", color="cornflowerblue", linewidth=0.5)
-    plt.plot(keyframe_ids, uncert_lc, label="uncertainty score LC", color="sandybrown", linewidth=0.5)
+    plt.plot(keyframe_ids, det_ba_loc, label="uncertainty score BA", color="dodgerblue", alpha=0.6, linewidth=1.5)
+    plt.plot(keyframe_ids, det_lc_loc, label="uncertainty score LC", color="sandybrown", alpha=0.8, linewidth=1.5)
+    
     if lc_targets:
-        plt.scatter(lc_targets, [min(uncert_lc)] * len(lc_targets), color="tab:blue", zorder=5, label="Loop Closure Location")
-    plt.title("Uncertainty size vs keyframe - Location Uncertainty (log10 det)")
+        plt.scatter(lc_targets, [0] * len(lc_targets), color="tab:blue", label="Loop Closure Location", zorder=5)
+    
     plt.xlabel("KeyFrame Index")
     plt.ylabel("uncertainty score per frame")
-    plt.grid(alpha=0.3)
+    plt.title("Uncertainty size vs keyframe - Location Uncertainty (log10 det, shifted)")
     plt.legend()
+    plt.grid(alpha=0.3)
+
+    # --- Angle Uncertainty ---
+    det_ba_rot = [safe_log_det(covs_ba[kf][0:3, 0:3]) for kf in keyframe_ids]
+    det_lc_rot = [safe_log_det(covs_lc[kf][0:3, 0:3]) for kf in keyframe_ids]
     
-    # Angle Uncertainty (Rotation block [0:3, 0:3])
+    # Shift to start at 0
+    det_ba_rot = np.array(det_ba_rot) - det_ba_rot[0]
+    det_lc_rot = np.array(det_lc_rot) - det_lc_rot[0]
+
     plt.subplot(2, 1, 2)
-    uncert_ba_ang = [safe_log_det(covs_ba[fid][0:3, 0:3]) for fid in keyframe_ids]
-    uncert_lc_ang = [safe_log_det(covs_lc[fid][0:3, 0:3]) for fid in keyframe_ids]
-    plt.plot(keyframe_ids, uncert_ba_ang, label="uncertainty score BA", color="cornflowerblue", linewidth=0.5)
-    plt.plot(keyframe_ids, uncert_lc_ang, label="uncertainty score LC", color="sandybrown", linewidth=0.5)
+    plt.plot(keyframe_ids, det_ba_rot, label="uncertainty score BA", color="dodgerblue", alpha=0.6, linewidth=1.5)
+    plt.plot(keyframe_ids, det_lc_rot, label="uncertainty score LC", color="sandybrown", alpha=0.8, linewidth=1.5)
+    
     if lc_targets:
-        plt.scatter(lc_targets, [min(uncert_lc_ang)] * len(lc_targets), color="tab:blue", zorder=5, label="Loop Closure Location")
+        plt.scatter(lc_targets, [0] * len(lc_targets), color="tab:blue", label="Loop Closure Location", zorder=5)
     plt.title("Uncertainty size vs keyframe - Angle Uncertainty (log10 det)")
     plt.xlabel("KeyFrame Index")
     plt.ylabel("uncertainty score per frame")

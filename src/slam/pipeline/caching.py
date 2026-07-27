@@ -50,11 +50,51 @@ def load_or_build_pose_graph_no_lc():
     if path.exists():
         with open(path, 'rb') as f:
             return pickle.load(f)
-    candidates_by_target, build_result, pose_graph_result, slam_db, keyframe_ids = _build_pg_no_lc()
+    # Reuse BA window solutions already computed by load_or_build_bundle_windows
+    # to avoid running solve_all_bundle_windows twice.
+    bundle_data = load_or_build_bundle_windows()
+    bundle_solutions = bundle_data['context'].solutions
+    keyframes = bundle_data['context'].keyframes
+    candidates_by_target, build_result, pose_graph_result, slam_db, keyframe_ids = _build_pg_no_lc(
+        bundle_solutions=bundle_solutions, keyframes=keyframes
+    )
     data = {'candidates_by_target': candidates_by_target, 'build_result': build_result, 'pose_graph_result': pose_graph_result, 'keyframe_ids': keyframe_ids}
     with open(path, 'wb') as f:
         pickle.dump(data, f)
     return data
+
+def load_or_build_subsection_pairs(lengths=(100, 400, 800)):
+    """Precompute exact keyframe pairs for each sequence length.
+
+    For each length L and each start keyframe i, finds the keyframe j whose
+    frame_id is closest to frame_ids[i] + L.  The result is cached so that
+    plotting scripts can use exact indices without repeating the search.
+
+    Returns a dict:
+        {length: [(i, j, frame_id_i, frame_id_j), ...]}
+    """
+    import pickle
+    path = config.CACHE_DIR / 'subsection_pairs.pkl'
+    if path.exists():
+        with open(path, 'rb') as f:
+            return pickle.load(f)
+
+    keyframe_ids = np.array(load_or_build_pose_graph_no_lc()['keyframe_ids'])
+    pairs = {}
+    for L in lengths:
+        L_pairs = []
+        for i, fid_i in enumerate(keyframe_ids):
+            target = fid_i + L
+            if target > keyframe_ids[-1]:
+                break
+            j = int(np.argmin(np.abs(keyframe_ids - target)))
+            if j > i:
+                L_pairs.append((i, j, int(fid_i), int(keyframe_ids[j])))
+        pairs[L] = L_pairs
+
+    with open(path, 'wb') as f:
+        pickle.dump(pairs, f)
+    return pairs
 
 def load_or_build_loop_closures():
     import pickle
