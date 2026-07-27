@@ -5,7 +5,7 @@ import math
 import cv2
 import numpy as np
 
-from .pnp import solve_pnp_safe
+from .projection import solve_pnp_safe
 from .projection import count_supporters
 from .. import config
 
@@ -138,18 +138,21 @@ def ransac_pnp(
             translation_norm = np.linalg.norm(candidate_transform[:3, 3])
 
             if translation_norm < max_translation_m:
-                supporter_mask, _ = count_supporters(
-                    transform_left0_to_left1=candidate_transform,
-                    points_3d_left0=points_3d,
-                    left0=left0,
-                    right0=right0,
-                    left1=left1,
-                    right1=right1,
-                    intrinsic_matrix=intrinsic_matrix,
-                    left_projection_matrix=left_projection_matrix,
-                    right_projection_matrix=right_projection_matrix,
-                    threshold_pixels=supporter_threshold_pixels,
-                )
+                try:
+                    supporter_mask, _ = count_supporters(
+                        transform_left0_to_left1=candidate_transform,
+                        points_3d_left0=points_3d,
+                        left0=left0,
+                        right0=right0,
+                        left1=left1,
+                        right1=right1,
+                        intrinsic_matrix=intrinsic_matrix,
+                        left_projection_matrix=left_projection_matrix,
+                        right_projection_matrix=right_projection_matrix,
+                        threshold_pixels=supporter_threshold_pixels,
+                    )
+                except ValueError:
+                    supporter_mask = np.zeros(len(points_3d), dtype=bool)
 
                 supporter_count = int(np.sum(supporter_mask))
 

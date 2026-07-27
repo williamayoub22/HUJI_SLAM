@@ -4,7 +4,7 @@ import gtsam
 from gtsam.symbol_shorthand import C
 from pathlib import Path
 from src.slam import config
-from src.slam.database.facade import SlamDatabase
+from src.slam.data.db_facade import SlamDatabase
 from src.slam.pipeline.database_pipeline import build_database
 from src.slam.analysis.bundle_diagnostics import prepare_bundle_adjustment_analysis, compute_bundle_window_errors
 from src.slam.pipeline.pose_graph_pipeline import _build_pg_no_lc, _build_pg_with_lc

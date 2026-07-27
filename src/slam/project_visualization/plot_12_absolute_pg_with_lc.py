@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
-from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
+from src.slam.geometry.stereo import pose3_from_world_to_camera_extrinsic
 from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc
 import gtsam
 
@@ -11,7 +11,7 @@ def main():
     gt_poses = [pose3_from_world_to_camera_extrinsic(g) for g in gt]
     
     data = load_or_build_pose_graph_with_lc()
-    est_matrices = data["pose_graph_matrices"]
+    est_matrices = data["pose_graph_lc_matrices"]
     
     from src.slam.pipeline.caching import load_or_build_pose_graph_no_lc
     keyframe_ids = load_or_build_pose_graph_no_lc()["keyframe_ids"]
@@ -39,17 +39,17 @@ def main():
     ax1.plot(keyframe_ids[:len(err_norm)], err_norm, label="norm", linewidth=1.5)
     ax1.set_xlabel("frame")
     ax1.set_ylabel("Estimation Error (m)")
-    ax1.set_title("Absolute Pose Graph (No LC) estimation error: Location")
+    ax1.set_title("Absolute Pose Graph (With LC) estimation error: Location")
     ax1.legend()
     ax1.grid()
     
     ax2.plot(keyframe_ids[:len(err_angle)], err_angle, color="red", linewidth=1.5)
     ax2.set_xlabel("frame")
     ax2.set_ylabel("Angle Error (deg)")
-    ax2.set_title("Absolute Pose Graph (No LC) estimation error: Angle")
+    ax2.set_title("Absolute Pose Graph (With LC) estimation error: Angle")
     ax2.grid()
     
     plt.tight_layout()
-    plt.savefig(FINAL_ANALYSIS_OUTPUT_DIR / "11_absolute_pose_graph_no_lc_error.png", dpi=150)
+    plt.savefig(FINAL_ANALYSIS_OUTPUT_DIR / "12_absolute_pose_graph_with_lc_error.png", dpi=150)
 
 if __name__ == "__main__": main()

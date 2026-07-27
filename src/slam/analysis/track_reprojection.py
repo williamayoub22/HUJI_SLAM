@@ -1,11 +1,3 @@
-import gtsam
-from gtsam.symbol_shorthand import C, Q
-from src.slam.geometry.transforms import to_homogeneous_transform, compose_camera_transform
-from src.slam.ba.gtsam_utils import make_stereo_camera, pose3_from_world_to_camera_extrinsic, stereo_point_from_triplet
-from src.slam.io.calibration import read_stereo_calibration
-from src.slam.ba.gtsam_utils import make_gtsam_stereo_calibration
-from src.slam.config import GLOBAL_CAMERA_MATRICES_PATH
-
 """Analyze stereo reprojection consistency along one tracked feature."""
 
 import logging
@@ -16,14 +8,20 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
-from src.slam.ba.gtsam_utils import (
+
+from src.slam import config
+from src.slam.config import GLOBAL_CAMERA_MATRICES_PATH
+from src.slam.data.tracking_db import TrackingDB
+from src.slam.geometry.stereo import (
+    make_gtsam_stereo_calibration,
+    make_stereo_camera,
     pose3_from_world_to_camera_extrinsic,
+    stereo_image_distances,
     stereo_point_from_triplet,
     stereo_residual_norm,
-    stereo_image_distances,
 )
-from src.slam.database.tracking_database import TrackingDB
-from .. import config
+from src.slam.geometry.transforms import compose_camera_transform, to_homogeneous_transform
+from src.slam.io.calibration import read_stereo_calibration
 
 LOGGER = logging.getLogger(__name__)
 

@@ -1,11 +1,29 @@
 import pickle
-from .manager_2d import Manager2D
-from .manager_3d import Manager3D
-from .manager_poses import ManagerPoses
+from .tracking_db import TrackingDB
+
+class Manager3D:
+    def __init__(self):
+        self._points = {}
+    def add_point(self, track_id: int, point):
+        self._points[track_id] = point
+    def get_point(self, track_id: int):
+        return self._points[track_id]
+    def get_all_points(self):
+        return self._points
+
+class ManagerPoses:
+    def __init__(self):
+        self._poses = {}
+    def add_pose(self, frame_id: int, pose):
+        self._poses[frame_id] = pose
+    def get_pose(self, frame_id: int):
+        return self._poses[frame_id]
+    def get_all_poses(self):
+        return self._poses
 
 class SlamDatabase:
     def __init__(self):
-        self.manager_2d = Manager2D()
+        self.manager_2d = TrackingDB()
         self.manager_3d = Manager3D()
         self.manager_poses = ManagerPoses()
 

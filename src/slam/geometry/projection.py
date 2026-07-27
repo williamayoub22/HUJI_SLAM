@@ -188,3 +188,17 @@ def count_supporters(
     )
 
     return supporter_mask, errors
+
+
+import cv2
+
+def solve_pnp_safe(pts_3d, pts_2d, K, flags):
+    try:
+        success, rvec, tvec = cv2.solvePnP(pts_3d, pts_2d, K, None, flags=flags)
+        if success:
+            R, _ = cv2.Rodrigues(rvec)
+            T = np.hstack((R, tvec))
+            return T
+    except cv2.error:
+        pass
+    return None

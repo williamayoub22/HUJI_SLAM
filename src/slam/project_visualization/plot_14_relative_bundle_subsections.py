@@ -2,7 +2,7 @@ import numpy as np
 from dataclasses import dataclass
 from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_pose_graph_no_lc
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
-from src.slam.visualization.final_plots import plot_relative_error_subsections_line
+from src.slam.project_visualization.plot_helpers import plot_relative_error_subsections_line
 
 def main():
     FINAL_ANALYSIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

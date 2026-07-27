@@ -5,7 +5,7 @@ import gtsam
 from gtsam.symbol_shorthand import C
 from src.slam import config
 from pathlib import Path
-from src.slam.loop_closure.candidate_detection import LoopClosureCandidate
+from src.slam.loop_closure.candidates import LoopClosureCandidate
 
 
 def _print_mahalanobis_threshold_sweep(all_candidates: list, *, max_translation_m: float=5.0, max_rotation_deg: float=20.0) -> float:

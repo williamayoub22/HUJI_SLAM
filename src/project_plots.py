@@ -1,4 +1,4 @@
-from src.final_analysis import (
+from src.slam.project_visualization import (
     plot_1_matches,
     plot_2_inlier_percentage,
     plot_3_connectivity,

@@ -2,24 +2,25 @@ import gtsam
 from gtsam.symbol_shorthand import C
 from src.slam.pipeline.database_pipeline import build_database
 from src.slam import config
-from src.slam.loop_closure.candidate_detection import RelativePoseEstimate, LoopClosureCandidate, score_candidates_for_keyframe, detect_candidates_for_keyframe
+from src.slam.loop_closure.candidates import LoopClosureCandidate, score_candidates_for_keyframe, detect_candidates_for_keyframe
+from src.slam.loop_closure.refinement import RelativePoseEstimate
 from src.slam.pose_graph.graph_builder import build_pose_graph
-from src.slam.pose_graph.optimization import optimize_pose_graph
-from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
-from src.slam.loop_closure.calibration import _print_mahalanobis_threshold_sweep, _show_candidate_pair
+from src.slam.pose_graph.optimizer import optimize_pose_graph
+from src.slam.geometry.stereo import pose3_from_world_to_camera_extrinsic
+from src.slam.loop_closure.diagnostics import _print_mahalanobis_threshold_sweep, _show_candidate_pair
 # solve BA windows and extract all constraints
 
 import numpy as np
 
-from src.slam.ba.gtsam_utils import make_gtsam_stereo_calibration
-from src.slam.ba.window_selection import choose_keyframes_by_motion
-from src.slam.ba.window_solver import solve_all_bundle_windows
+from src.slam.geometry.stereo import make_gtsam_stereo_calibration
+from src.slam.bundle_adjustment.window_selection import choose_keyframes_by_motion
+from src.slam.bundle_adjustment.window_solver import solve_all_bundle_windows
 from src.slam.config import (
     DB_PATH,
     GLOBAL_CAMERA_MATRICES_PATH,
 )
 from src.slam.io.calibration import read_stereo_calibration
-from src.slam.database.facade import SlamDatabase
+from src.slam.data.db_facade import SlamDatabase
 from src.slam.pose_graph.constraints import extract_relative_pose_constraint
 
 

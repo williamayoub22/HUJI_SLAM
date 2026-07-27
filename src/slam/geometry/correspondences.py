@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..pipeline.stereo_pipeline import StereoPointCloud
+
 
 
 @dataclass(frozen=True)
@@ -28,8 +28,11 @@ class FourViewCorrespondences:
 
 
 def find_common_points(
-    point_cloud0: StereoPointCloud,
-    point_cloud1: StereoPointCloud,
+    points_3d0: np.ndarray,
+    left_inliers0: np.ndarray,
+    right_inliers0: np.ndarray,
+    left_inliers1: np.ndarray,
+    right_inliers1: np.ndarray,
     temporal_left0: np.ndarray,
     temporal_left1: np.ndarray,
     tolerance: float = 1e-3,
@@ -41,8 +44,11 @@ def find_common_points(
     inliers, producing observations in left0, right0, left1, and right1.
 
     Args:
-        point_cloud0: Stereo triangulation results for frame 0.
-        point_cloud1: Stereo triangulation results for frame 1.
+        points_3d0: 3D points for frame 0, shape (N, 3).
+        left_inliers0: Left-image stereo inliers for frame 0, shape (N, 2).
+        right_inliers0: Right-image stereo inliers for frame 0, shape (N, 2).
+        left_inliers1: Left-image stereo inliers for frame 1, shape (N, 2).
+        right_inliers1: Right-image stereo inliers for frame 1, shape (N, 2).
         temporal_left0: Matched left-image points in frame 0, shape ``(N, 2)``.
         temporal_left1: Corresponding left-image points in frame 1, shape
             ``(N, 2)``.
@@ -82,13 +88,13 @@ def find_common_points(
         strict=True,
     ):
         distances0 = np.linalg.norm(
-            point_cloud0.left_inliers - left0_point,
+            left_inliers0 - left0_point,
             axis=1,
         )
         index0 = int(np.argmin(distances0))
 
         distances1 = np.linalg.norm(
-            point_cloud1.left_inliers - left1_point,
+            left_inliers1 - left1_point,
             axis=1,
         )
         index1 = int(np.argmin(distances1))
@@ -96,11 +102,11 @@ def find_common_points(
         if distances0[index0] > tolerance or distances1[index1] > tolerance:
             continue
 
-        points_3d.append(point_cloud0.points_3d[index0])
-        left0_points.append(point_cloud0.left_inliers[index0])
-        right0_points.append(point_cloud0.right_inliers[index0])
-        left1_points.append(point_cloud1.left_inliers[index1])
-        right1_points.append(point_cloud1.right_inliers[index1])
+        points_3d.append(points_3d0[index0])
+        left0_points.append(left_inliers0[index0])
+        right0_points.append(right_inliers0[index0])
+        left1_points.append(left_inliers1[index1])
+        right1_points.append(right_inliers1[index1])
 
     if not points_3d:
         return FourViewCorrespondences(

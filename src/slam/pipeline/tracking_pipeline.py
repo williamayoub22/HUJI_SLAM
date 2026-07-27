@@ -87,8 +87,11 @@ def track_sequence(
                 pts_l0, pts_l1 = get_matched_points(kp_prev, kp_curr, matches)
 
                 correspondences = find_common_points(
-                    pc_prev,
-                    pc_curr,
+                    pc_prev.points_3d,
+                    pc_prev.left_inliers,
+                    pc_prev.right_inliers,
+                    pc_curr.left_inliers,
+                    pc_curr.right_inliers,
                     pts_l0,
                     pts_l1,
                 )

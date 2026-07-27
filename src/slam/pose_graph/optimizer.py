@@ -2,7 +2,16 @@ import time
 
 import gtsam
 
-from src.slam.pose_graph.results import PoseGraphResult
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class PoseGraphResult:
+    graph: gtsam.NonlinearFactorGraph
+    initial_estimates: gtsam.Values
+    optimized_estimates: gtsam.Values
+    keyframe_ids: list[int]
+    initial_error: float
+    final_error: float
 
 
 def optimize_pose_graph(
@@ -47,3 +56,5 @@ def optimize_pose_graph(
         initial_error=initial_error,
         final_error=final_error,
     )
+
+

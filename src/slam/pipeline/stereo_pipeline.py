@@ -6,7 +6,9 @@ import numpy as np
 from ..features.matching import get_matched_points
 from ..geometry.triangulation import triangulate_dlt, triangulate_opencv
 from ..io.calibration import read_stereo_calibration
-from ..io.image_loader import load_matches_between_images
+from ..io.image_loader import read_images
+from ..features.detectors import FeatureType
+from ..features.matching import extract_and_match_features
 from .. import config
 
 from .. import config
@@ -37,12 +39,53 @@ class StereoPointCloud:
     points_3d: np.ndarray
 
 
-def load_frame_data(
-    frame_idx: int,
-) -> StereoMatchData:
+def load_matches_between_images(
+    frame_id: int,
+    feature_type: FeatureType = "sift",
+    num_features: int = 1000,
+    use_ratio_test: bool = False,
+) -> tuple[
+    list[cv2.KeyPoint],
+    list[cv2.KeyPoint],
+    np.ndarray,
+    np.ndarray,
+    list[cv2.DMatch],
+]:
+    """Load one stereo pair, extract features, and match their descriptors.
+
+    Args:
+        frame_id: Zero-based stereo-frame index.
+        feature_type: Feature detector and descriptor type.
+        num_features: Requested number of detected features.
+        use_ratio_test: Whether to apply Lowe's ratio test.
+
+    Returns:
+        Left keypoints, right keypoints, left image, right image, and accepted
+        stereo matches.
+    """
+    left_image, right_image = read_images(frame_id)
+
+    left_keypoints, right_keypoints, matches = extract_and_match_features(
+        left_image,
+        right_image,
+        feature_type=feature_type,
+        num_features=num_features,
+        use_ratio_test=use_ratio_test,
+    )
+
+    return (
+        left_keypoints,
+        right_keypoints,
+        left_image,
+        right_image,
+        matches,
+    )
+
+
+def load_frame_data(frame_id: int) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
     left_keypoints, right_keypoints, left_image, right_image, matches = load_matches_between_images(
-        frame_idx,
+        frame_id,
         feature_type=config.FEATURE_TYPE,
         num_features=config.NUM_FEATURES,
         use_ratio_test=True,

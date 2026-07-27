@@ -1,4 +1,6 @@
-from src.slam.loop_closure.candidate_detection import detect_candidates_for_keyframe, score_candidates_for_keyframe, refine_relative_pose_with_bundle_adjustment, ConsensusMatchResult, LoopClosureCandidate, RelativePoseEstimate, select_spread_loop_closures, ConsensusMatcher
+from src.slam.loop_closure.candidates import detect_candidates_for_keyframe, score_candidates_for_keyframe, LoopClosureCandidate, select_spread_loop_closures
+from src.slam.loop_closure.consensus import ConsensusMatchResult, ConsensusMatcher
+from src.slam.loop_closure.refinement import refine_relative_pose_with_bundle_adjustment, RelativePoseEstimate
 from src.slam.pose_graph.graph_builder import PoseGraphBuildResult
 import numpy as np
 import gtsam

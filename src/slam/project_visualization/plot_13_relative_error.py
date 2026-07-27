@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from src.slam.pipeline.caching import load_or_build_pose_graph_with_lc, load_or_build_db
 from src.slam.config import FINAL_ANALYSIS_OUTPUT_DIR, GT_POSES_PATH
 from src.slam.geometry.transforms import to_homogeneous_transform
-from src.slam.ba.gtsam_utils import pose3_from_world_to_camera_extrinsic
+from src.slam.geometry.stereo import pose3_from_world_to_camera_extrinsic
 def relative_dists(poses, is_gtsam_matrix=False):
     dists = []
     for i in range(len(poses)-1):

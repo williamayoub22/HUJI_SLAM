@@ -4,7 +4,7 @@ import gtsam
 import numpy as np
 from gtsam.symbol_shorthand import C, Q
 
-from .results import BundleWindowSolution
+from .types import BundleWindowSolution
 
 
 def compose_keyframe_poses_in_frame0(

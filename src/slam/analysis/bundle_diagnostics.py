@@ -2,11 +2,11 @@ from dataclasses import dataclass
 import gtsam
 import numpy as np
 from src.slam.io.calibration import read_stereo_calibration
-from src.slam.ba.gtsam_utils import make_gtsam_stereo_calibration
+from src.slam.geometry.stereo import make_gtsam_stereo_calibration
 from src.slam.config import GLOBAL_CAMERA_MATRICES_PATH
-from src.slam.ba.window_selection import choose_keyframes_by_motion
-from src.slam.ba.window_solver import solve_all_bundle_windows
-from src.slam.ba.results import BundleWindowSolution
+from src.slam.bundle_adjustment.window_selection import choose_keyframes_by_motion
+from src.slam.bundle_adjustment.window_solver import solve_all_bundle_windows
+from src.slam.bundle_adjustment.types import BundleWindowSolution
 
 @dataclass
 class BundleAnalysisContext:
@@ -20,15 +20,15 @@ from dataclasses import dataclass
 
 import gtsam
 from gtsam.symbol_shorthand import C, Q
-from src.slam.ba.gtsam_utils import (
+from src.slam.geometry.stereo import (
     stereo_image_distances,
     stereo_point_from_triplet,
 )
-from src.slam.ba.results import (
+from src.slam.bundle_adjustment.types import (
     BundleAdjustmentResult,
     ProjectionFactorMetadata,
 )
-from src.slam.database.tracking_database import TrackingDB
+from src.slam.data.tracking_db import TrackingDB
 
 
 @dataclass(frozen=True)
