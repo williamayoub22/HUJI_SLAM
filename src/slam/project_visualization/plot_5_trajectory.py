@@ -17,7 +17,7 @@ def main():
     gt_pos = []
     for g in gt: gt_pos.append(pose3_from_world_to_camera_extrinsic(g).translation())
     gt_pos = np.array(gt_pos)
-    plt.plot(gt_pos[:, 0], gt_pos[:, 2], label="Ground Truth", color="black", linewidth=2)
+    plt.plot(gt_pos[:, 0], gt_pos[:, 2], label="Ground Truth", color="black", linewidth=0.5)
     
     pnp_pos = []
     for fid in sorted(db.manager_poses.get_all_poses().keys()):

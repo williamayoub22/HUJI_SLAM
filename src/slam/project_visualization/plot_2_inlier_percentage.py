@@ -9,7 +9,7 @@ def main():
     inlier_percentages = load_or_build_inlier_percentages()
     
     plt.figure(figsize=(10, 4))
-    plt.plot(range(len(inlier_percentages)), inlier_percentages, linewidth=0.7)
+    plt.plot(range(len(inlier_percentages)), inlier_percentages, linewidth=0.5)
     mean_val = np.mean(inlier_percentages) if len(inlier_percentages) > 0 else 0
     plt.axhline(mean_val, linestyle="--", color="C1", label=f"Mean: {mean_val:.1f}%")
     plt.xlabel("Frame ID")

@@ -37,7 +37,7 @@ def match_left_frames(
     left0_img, _ = read_images(frame_idx0)
     left1_img, _ = read_images(frame_idx1)
 
-    kp_left0, kp_left1, matches = extract_and_match_features(
+    kp_left0, kp_left1, des0, matches = extract_and_match_features(
         left0_img,
         left1_img,
         feature_type=config.FEATURE_TYPE,

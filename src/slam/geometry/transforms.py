@@ -32,33 +32,6 @@ def to_homogeneous_transform(transform: np.ndarray) -> np.ndarray:
     raise ValueError(f"Expected a transform with shape (3, 4) or (4, 4), got {transform.shape}.")
 
 
-def compose_frame0_to_camera_extrinsics(
-    relative_transforms: Sequence[np.ndarray],
-) -> np.ndarray:
-    """Compose consecutive camera transforms into frame-0-to-camera extrinsics.
-
-    Each relative transform ``relative_transforms[i]`` maps coordinates from
-    camera ``i`` to camera ``i + 1``. The returned transform at index ``i``
-    maps coordinates from frame 0 to camera ``i``.
-
-    Args:
-        relative_transforms: Consecutive transforms ``T_i_to_i_plus_1``.
-
-    Returns:
-        Homogeneous extrinsics with shape ``(N + 1, 4, 4)``, where element zero
-        is the identity transform.
-    """
-    frame0_to_camera: list[np.ndarray] = [np.eye(4)]
-    transform_frame0_to_current = np.eye(4)
-
-    for transform_current_to_next in relative_transforms:
-        transform_current_to_next = to_homogeneous_transform(transform_current_to_next)
-
-        transform_frame0_to_current = transform_current_to_next @ transform_frame0_to_current
-        frame0_to_camera.append(transform_frame0_to_current.copy())
-
-    return np.asarray(frame0_to_camera)
-
 
 def camera_center_from_world_to_camera_extrinsic(
     world_to_camera: np.ndarray,
@@ -141,18 +114,11 @@ def get_relative_camera_transform(world_to_camera_by_frame, source_frame, target
     """
     Return the estimated transform from source-camera coordinates to
     target-camera coordinates.
-
-    Given:
-        T_source_world: world -> source camera
-        T_target_world: world -> target camera
-
-    Then:
-        T_target_source =
-            T_target_world @ inverse(T_source_world)
     """
-    source_world_to_camera = to_homogeneous_transform(world_to_camera_by_frame[source_frame])
-    target_world_to_camera = to_homogeneous_transform(world_to_camera_by_frame[target_frame])
-    return target_world_to_camera @ np.linalg.inv(source_world_to_camera)
+    return relative_world_to_camera_extrinsic(
+        world_to_camera_by_frame[source_frame],
+        world_to_camera_by_frame[target_frame],
+    )
 
 def compose_camera_transform(world_to_camera_by_frame, source_frame, target_frame):
     """

@@ -14,7 +14,7 @@ def main():
         matches_per_frame.append(len(manager_2d.tracks(fid)))
         
     plt.figure(figsize=(10, 4))
-    plt.plot(frame_ids, matches_per_frame, linewidth=0.7)
+    plt.plot(frame_ids, matches_per_frame, linewidth=0.5)
     mean_val = sum(matches_per_frame)/len(matches_per_frame) if matches_per_frame else 0
     plt.axhline(mean_val, linestyle="--", color="C1", label=f"Mean: {mean_val:.1f}")
     plt.xlabel("Frame ID")

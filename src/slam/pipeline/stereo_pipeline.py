@@ -11,9 +11,6 @@ from ..features.detectors import FeatureType
 from ..features.matching import extract_and_match_features
 from .. import config
 
-from .. import config
-
-
 @dataclass
 class StereoMatchData:
     """Container for one stereo pair, its matches, and vertical deviations."""
@@ -26,6 +23,7 @@ class StereoMatchData:
     left_pts: np.ndarray
     right_pts: np.ndarray
     deviations: np.ndarray
+    left_descriptors: np.ndarray
 
 
 @dataclass
@@ -43,10 +41,12 @@ def load_matches_between_images(
     frame_id: int,
     feature_type: FeatureType = "sift",
     num_features: int = 1000,
+    ratio_threshold: float = config.STEREO_RATIO_THRESHOLD,
     use_ratio_test: bool = False,
 ) -> tuple[
     list[cv2.KeyPoint],
     list[cv2.KeyPoint],
+    np.ndarray,
     np.ndarray,
     np.ndarray,
     list[cv2.DMatch],
@@ -60,16 +60,17 @@ def load_matches_between_images(
         use_ratio_test: Whether to apply Lowe's ratio test.
 
     Returns:
-        Left keypoints, right keypoints, left image, right image, and accepted
+        Left keypoints, right keypoints, left image, right image, left descriptors, and accepted
         stereo matches.
     """
     left_image, right_image = read_images(frame_id)
 
-    left_keypoints, right_keypoints, matches = extract_and_match_features(
+    left_keypoints, right_keypoints, left_descriptors, matches = extract_and_match_features(
         left_image,
         right_image,
         feature_type=feature_type,
         num_features=num_features,
+        ratio_threshold=ratio_threshold,
         use_ratio_test=use_ratio_test,
     )
 
@@ -78,16 +79,18 @@ def load_matches_between_images(
         right_keypoints,
         left_image,
         right_image,
+        left_descriptors,
         matches,
     )
 
 
-def load_frame_data(frame_id: int) -> StereoMatchData:
+def load_frame_data(frame_id: int, ratio_threshold: float = config.STEREO_RATIO_THRESHOLD) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
-    left_keypoints, right_keypoints, left_image, right_image, matches = load_matches_between_images(
+    left_keypoints, right_keypoints, left_image, right_image, left_descriptors, matches = load_matches_between_images(
         frame_id,
         feature_type=config.FEATURE_TYPE,
         num_features=config.NUM_FEATURES,
+        ratio_threshold=ratio_threshold,
         use_ratio_test=True,
     )
     left_pts, right_pts = get_matched_points(left_keypoints, right_keypoints, matches)
@@ -102,14 +105,21 @@ def load_frame_data(frame_id: int) -> StereoMatchData:
         left_pts=left_pts,
         right_pts=right_pts,
         deviations=deviations,
+        left_descriptors=left_descriptors,
     )
+
+
+def get_stereo_inlier_mask(data: StereoMatchData) -> np.ndarray:
+    """Computes a boolean mask for stereo inliers based on vertical deviation and minimum disparity."""
+    disparities = data.left_pts[:, 0] - data.right_pts[:, 0]
+    return (data.deviations <= config.DEVIATION_THRESHOLD) & (disparities > config.MIN_DISPARITY)
 
 
 def get_inlier_points(
     data: StereoMatchData,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Returns matched points that satisfy the vertical-deviation threshold."""
-    inlier_mask = data.deviations <= config.DEVIATION_THRESHOLD
+    """Returns the left and right point arrays filtered by the stereo inlier mask."""
+    inlier_mask = get_stereo_inlier_mask(data)
     return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
 
 
@@ -132,11 +142,12 @@ def keep_valid_depth_points(
     )
 
 
-def create_stereo_point_cloud(
+def create_stereo_cloud(
     frame_idx: int,
     use_custom_triangulation: bool = False,
     reject_negative_depth: bool = False,
     max_depth: float = config.MAX_DEPTH,
+    ratio_threshold: float = config.STEREO_RATIO_THRESHOLD,
 ) -> StereoPointCloud:
     """Creates a 3D point cloud for one stereo pair.
 
@@ -150,6 +161,7 @@ def create_stereo_point_cloud(
 
     data = load_frame_data(
         frame_idx,
+        ratio_threshold=ratio_threshold,
     )
     left_inliers, right_inliers = get_inlier_points(data)
 
@@ -175,12 +187,3 @@ def create_stereo_point_cloud(
     )
 
 
-def compute_rejection_statistics(
-    data: StereoMatchData,
-) -> tuple[int, int, float]:
-    """Computes rejection statistics for a vertical-deviation threshold."""
-    num_matches = len(data.matches)
-    num_rejected = int(np.sum(data.deviations > config.DEVIATION_THRESHOLD))
-    percentage_rejected = 100.0 * num_rejected / num_matches
-
-    return num_matches, num_rejected, percentage_rejected

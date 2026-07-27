@@ -18,8 +18,8 @@ def plot_optimization_median_projection_error(
     output_path: Path,
 ):
     plt.figure(figsize=(12, 5))
-    plt.plot(window_ids, initial_median_proj_errors, label="Initial error", color="orange", linewidth=1.5)
-    plt.plot(window_ids, final_median_proj_errors, label="Optimized error", color="blue", linewidth=1.5)
+    plt.plot(window_ids, initial_median_proj_errors, label="Initial error", color="orange", linewidth=0.5)
+    plt.plot(window_ids, final_median_proj_errors, label="Optimized error", color="blue", linewidth=0.5)
     plt.xlabel("Bundle Starting at frame idx")
     plt.ylabel("Median Projection Error [pixels]")
     plt.title("Median Projection Error Before and After Bundle Optimization")
@@ -46,7 +46,7 @@ def plot_trajectory_comparison_all(
     pos_pg_lc = np.asarray([m[:3, 3] for m in pg_lc_extrinsics], dtype=float)
 
     plt.figure(figsize=(12, 10))
-    plt.plot(pos_gt[:, 0], pos_gt[:, 2], label="ground_truth", color="green", linewidth=2, linestyle="--")
+    plt.plot(pos_gt[:, 0], pos_gt[:, 2], label="ground_truth", color="green", linewidth=0.5, linestyle="--")
     plt.plot(pos_pnp[:, 0], pos_pnp[:, 2], label="PnP_trajectory", color="red", alpha=0.7)
     plt.plot(pos_bundle[:, 0], pos_bundle[:, 2], label="Bundle_trajectory", color="orange", alpha=0.7)
     plt.plot(pos_pg_lc[:, 0], pos_pg_lc[:, 2], label="PoseGraph_LC_trajectory", color="blue", alpha=0.7)
@@ -97,7 +97,7 @@ def plot_absolute_estimation_error(estimated_poses, gt_poses, frame_ids, title_p
     plt.plot(frame_ids, err_x, label="x", alpha=0.8)
     plt.plot(frame_ids, err_y, label="y", alpha=0.8)
     plt.plot(frame_ids, err_z, label="z", alpha=0.8)
-    plt.plot(frame_ids, err_norm, label="norm", linewidth=2)
+    plt.plot(frame_ids, err_norm, label="norm", linewidth=0.5)
     plt.xlabel("frame")
     plt.ylabel("Error [m]")
     plt.title(f"{title_prefix} Location Error")
@@ -224,7 +224,7 @@ def plot_relative_error_subsections_line(estimated_poses, gt_poses, frame_ids, t
                     x_vals.append(start_fid)
                     y_vals.append(val)
                     
-            plt.plot(x_vals, y_vals, label=f"{length}", linewidth=1.5)
+            plt.plot(x_vals, y_vals, label=f"{length}", linewidth=0.5)
             
         plt.xlabel("Frame Number")
         plt.ylabel(f"Total {metric} error norm (measure as error%: m/m)" if metric == "Location" else f"{metric} error (measure as deg/m)")
@@ -287,8 +287,8 @@ def plot_uncertainty(versions_data, lc_stats, keyframe_ids, output_path: Path):
     plt.subplot(2, 1, 1)
     uncert_ba = [safe_log_det(covs_ba[fid][3:6, 3:6]) for fid in keyframe_ids]
     uncert_lc = [safe_log_det(covs_lc[fid][3:6, 3:6]) for fid in keyframe_ids]
-    plt.plot(keyframe_ids, uncert_ba, label="uncertainty score BA", color="cornflowerblue", linewidth=2)
-    plt.plot(keyframe_ids, uncert_lc, label="uncertainty score LC", color="sandybrown", linewidth=2)
+    plt.plot(keyframe_ids, uncert_ba, label="uncertainty score BA", color="cornflowerblue", linewidth=0.5)
+    plt.plot(keyframe_ids, uncert_lc, label="uncertainty score LC", color="sandybrown", linewidth=0.5)
     if lc_targets:
         plt.scatter(lc_targets, [min(uncert_lc)] * len(lc_targets), color="tab:blue", zorder=5, label="Loop Closure Location")
     plt.title("Uncertainty size vs keyframe - Location Uncertainty (log10 det)")
@@ -301,8 +301,8 @@ def plot_uncertainty(versions_data, lc_stats, keyframe_ids, output_path: Path):
     plt.subplot(2, 1, 2)
     uncert_ba_ang = [safe_log_det(covs_ba[fid][0:3, 0:3]) for fid in keyframe_ids]
     uncert_lc_ang = [safe_log_det(covs_lc[fid][0:3, 0:3]) for fid in keyframe_ids]
-    plt.plot(keyframe_ids, uncert_ba_ang, label="uncertainty score BA", color="cornflowerblue", linewidth=2)
-    plt.plot(keyframe_ids, uncert_lc_ang, label="uncertainty score LC", color="sandybrown", linewidth=2)
+    plt.plot(keyframe_ids, uncert_ba_ang, label="uncertainty score BA", color="cornflowerblue", linewidth=0.5)
+    plt.plot(keyframe_ids, uncert_lc_ang, label="uncertainty score LC", color="sandybrown", linewidth=0.5)
     if lc_targets:
         plt.scatter(lc_targets, [min(uncert_lc_ang)] * len(lc_targets), color="tab:blue", zorder=5, label="Loop Closure Location")
     plt.title("Uncertainty size vs keyframe - Angle Uncertainty (log10 det)")

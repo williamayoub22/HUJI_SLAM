@@ -46,9 +46,9 @@ def main():
     err_pg_lc = np.abs(pg_lc_d - gt_d[keyframe_ids[:-1]])
     
     plt.figure(figsize=(10, 4))
-    plt.plot(np.arange(len(err_pnp)), err_pnp, label="PnP", color="dodgerblue", alpha=0.5, linewidth=1)
-    plt.plot(keyframe_ids[:-1], err_pg, label="PG (No LC)", color="darkorange", alpha=0.9, linewidth=1.5, linestyle="--")
-    plt.plot(keyframe_ids[:-1], err_pg_lc, label="PG (With LC)", color="green", alpha=0.9, linewidth=1.5)
+    plt.plot(np.arange(len(err_pnp)), err_pnp, label="PnP", color="dodgerblue", alpha=0.5, linewidth=0.5)
+    plt.plot(keyframe_ids[:-1], err_pg, label="PG (No LC)", color="darkorange", alpha=0.9, linewidth=0.5, linestyle="--")
+    plt.plot(keyframe_ids[:-1], err_pg_lc, label="PG (With LC)", color="green", alpha=0.9, linewidth=0.5)
     plt.xlabel("Frame Pair")
     plt.ylabel("Relative Error [m]")
     plt.title("Relative Translation Error")

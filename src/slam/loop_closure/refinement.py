@@ -21,7 +21,7 @@ from src.slam.io.calibration import read_stereo_calibration
 from src.slam.loop_closure.consensus import ConsensusMatchResult
 
 
-SOURCE_POSE_PRIOR_SIGMA = 1e-9
+SOURCE_POSE_PRIOR_SIGMA = config.SOURCE_POSE_PRIOR_SIGMA
 
 @dataclass(frozen=True)
 class RelativePoseEstimate:

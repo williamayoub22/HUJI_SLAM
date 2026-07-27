@@ -17,7 +17,7 @@ from src.slam.pose_graph.covariance_routing import (
     mahalanobis_squared,
 )
 from .. import config
-from src.slam.pipeline.stereo_pipeline import create_stereo_point_cloud, StereoPointCloud
+from src.slam.pipeline.stereo_pipeline import create_stereo_cloud, StereoPointCloud
 from src.slam.pipeline.temporal_pipeline import match_left_frames
 from src.slam.geometry.correspondences import find_common_points
 from src.slam.io.calibration import read_stereo_calibration
@@ -67,7 +67,7 @@ class ConsensusMatcher:
     def _get_stereo_cloud(self, frame_id: int) -> StereoPointCloud:
         """Load or compute the stereo point cloud of one frame."""
         if frame_id not in self._stereo_cache:
-            self._stereo_cache[frame_id] = create_stereo_point_cloud(
+            self._stereo_cache[frame_id] = create_stereo_cloud(
                 frame_id,
                 reject_negative_depth=True,
                 use_custom_triangulation=False,
@@ -201,5 +201,3 @@ class ConsensusMatcher:
             target_right=right1,
         )
 
-
-SOURCE_POSE_PRIOR_SIGMA = 1e-9

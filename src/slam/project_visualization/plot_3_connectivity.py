@@ -16,7 +16,7 @@ def main():
         frame_connectivities.append(len(current_tracks.intersection(next_tracks)))
         
     plt.figure(figsize=(10, 4))
-    plt.plot(frame_ids[:-1], frame_connectivities, linewidth=0.7)
+    plt.plot(frame_ids[:-1], frame_connectivities, linewidth=0.5)
     mean_val = sum(frame_connectivities)/len(frame_connectivities) if frame_connectivities else 0
     plt.axhline(mean_val, linestyle="--", color="C1", label=f"Mean: {mean_val:.1f}")
     plt.xlabel("Frame ID")

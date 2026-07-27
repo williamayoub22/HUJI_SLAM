@@ -150,7 +150,7 @@ def extract_and_match_features(
     num_features: int | None = None,
     ratio_threshold: float = config.STEREO_RATIO_THRESHOLD,
     use_ratio_test: bool = False,
-) -> tuple[list[cv2.KeyPoint], list[cv2.KeyPoint], list[cv2.DMatch]]:
+) -> tuple[list[cv2.KeyPoint], list[cv2.KeyPoint], np.ndarray, list[cv2.DMatch]]:
     """Extract features from two images and compute descriptor correspondences.
 
     When ``use_ratio_test`` is false, this returns the nearest descriptor match
@@ -166,7 +166,7 @@ def extract_and_match_features(
         use_ratio_test: Whether to reject ambiguous nearest-neighbor matches.
 
     Returns:
-        Keypoints from both images and descriptor matches between them.
+        Keypoints from both images, descriptors from the first image, and descriptor matches between them.
     """
     keypoints1, descriptors1 = extract_features(
         image1,
@@ -191,8 +191,8 @@ def extract_and_match_features(
             knn_matches,
             ratio=ratio_threshold,
         )
-        return keypoints1, keypoints2, accepted_matches
+        return keypoints1, keypoints2, descriptors1, accepted_matches
 
     nearest_matches = [neighbors[0] for neighbors in knn_matches if neighbors]
 
-    return keypoints1, keypoints2, nearest_matches
+    return keypoints1, keypoints2, descriptors1, nearest_matches
