@@ -7,9 +7,9 @@ from ..features.matching import get_matched_points
 from ..geometry.triangulation import triangulate_dlt, triangulate_opencv
 from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import load_matches_between_images
+from .. import config
 
-DEVIATION_THRESHOLD = 2.0
-MAX_DEPTH = 300.0
+from .. import config
 
 
 @dataclass
@@ -39,16 +39,13 @@ class StereoPointCloud:
 
 def load_frame_data(
     frame_idx: int,
-    feature_type: str = "sift",
-    num_features: int = 1000,
-    use_ratio_test: bool = False,
 ) -> StereoMatchData:
     """Loads one stereo frame and precomputes matched points and deviations."""
     left_keypoints, right_keypoints, left_image, right_image, matches = load_matches_between_images(
         frame_idx,
-        feature_type=feature_type,
-        num_features=num_features,
-        use_ratio_test=use_ratio_test,
+        feature_type=config.FEATURE_TYPE,
+        num_features=config.NUM_FEATURES,
+        use_ratio_test=True,
     )
     left_pts, right_pts = get_matched_points(left_keypoints, right_keypoints, matches)
     deviations = np.abs(left_pts[:, 1] - right_pts[:, 1])
@@ -67,10 +64,9 @@ def load_frame_data(
 
 def get_inlier_points(
     data: StereoMatchData,
-    threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Returns matched points that satisfy the vertical-deviation threshold."""
-    inlier_mask = data.deviations <= threshold
+    inlier_mask = data.deviations <= config.DEVIATION_THRESHOLD
     return data.left_pts[inlier_mask], data.right_pts[inlier_mask]
 
 
@@ -78,7 +74,7 @@ def keep_valid_depth_points(
     points_3d: np.ndarray,
     left_pts: np.ndarray,
     right_pts: np.ndarray,
-    max_depth: float = MAX_DEPTH,
+    max_depth: float = config.MAX_DEPTH,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Keeps only triangulated points with positive depth and within max_depth.
     Points with z <= 0 are behind the camera; points with z >= max_depth
@@ -95,13 +91,9 @@ def keep_valid_depth_points(
 
 def create_stereo_point_cloud(
     frame_idx: int,
-    threshold: float = DEVIATION_THRESHOLD,
     use_custom_triangulation: bool = False,
     reject_negative_depth: bool = False,
-    max_depth: float = MAX_DEPTH,
-    feature_type: str = "sift",
-    num_features: int = 1000,
-    use_ratio_test: bool = False,
+    max_depth: float = config.MAX_DEPTH,
 ) -> StereoPointCloud:
     """Creates a 3D point cloud for one stereo pair.
 
@@ -115,11 +107,8 @@ def create_stereo_point_cloud(
 
     data = load_frame_data(
         frame_idx,
-        feature_type=feature_type,
-        num_features=num_features,
-        use_ratio_test=use_ratio_test,
     )
-    left_inliers, right_inliers = get_inlier_points(data, threshold)
+    left_inliers, right_inliers = get_inlier_points(data)
 
     if use_custom_triangulation:
         points_3d = triangulate_dlt(P1, P2, left_inliers, right_inliers)
@@ -145,11 +134,10 @@ def create_stereo_point_cloud(
 
 def compute_rejection_statistics(
     data: StereoMatchData,
-    threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[int, int, float]:
     """Computes rejection statistics for a vertical-deviation threshold."""
     num_matches = len(data.matches)
-    num_rejected = int(np.sum(data.deviations > threshold))
+    num_rejected = int(np.sum(data.deviations > config.DEVIATION_THRESHOLD))
     percentage_rejected = 100.0 * num_rejected / num_matches
 
     return num_matches, num_rejected, percentage_rejected

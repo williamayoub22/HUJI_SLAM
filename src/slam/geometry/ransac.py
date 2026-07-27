@@ -7,13 +7,9 @@ import numpy as np
 
 from .pnp import solve_pnp_safe
 from .projection import count_supporters
+from .. import config
 
-MAX_RANSAC_ITERATIONS = 2000
-RANSAC_CONFIDENCE = 0.99
-MAX_TRANSLATION = 30.0
-SUPPORTER_THRESHOLD_PIXELS = 2.0
-MIN_INLIERS = 6
-PNP_SAMPLE_SIZE = 4
+
 
 
 def _required_ransac_iterations(
@@ -56,11 +52,12 @@ def ransac_pnp(
     intrinsic_matrix: np.ndarray,
     left_projection_matrix: np.ndarray,
     right_projection_matrix: np.ndarray,
-    max_iterations: int = MAX_RANSAC_ITERATIONS,
-    confidence: float = RANSAC_CONFIDENCE,
-    supporter_threshold_pixels: float = SUPPORTER_THRESHOLD_PIXELS,
-    max_translation: float = MAX_TRANSLATION,
-    min_inliers: int = MIN_INLIERS,
+    max_iterations: int = config.MAX_RANSAC_ITERATIONS,
+    confidence: float = config.RANSAC_CONFIDENCE,
+    sample_size: int = config.PNP_SAMPLE_SIZE,
+    supporter_threshold_pixels: float = config.SUPPORTER_THRESHOLD_PIXELS,
+    max_translation_m: float = config.MAX_TRANSLATION_PNP,
+    min_inliers: int = config.MIN_INLIERS_PNP,
     seed: int | None = None,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Estimate a left0-to-left1 transform using RANSAC with PnP.
@@ -81,9 +78,6 @@ def ransac_pnp(
             ``(3, 4)``.
         right_projection_matrix: Right-camera-0 projection matrix, shape
             ``(3, 4)``.
-        max_iterations: Initial upper bound on RANSAC iterations.
-        confidence: Desired probability of sampling an all-inlier set.
-        supporter_threshold_pixels: Maximum reprojection error in each image.
         max_translation: Maximum allowed translation norm for a candidate pose.
         min_inliers: Minimum supporters required for a valid result.
         seed: Optional seed for reproducible random sampling.
@@ -98,23 +92,20 @@ def ransac_pnp(
     """
     num_points = len(points_3d)
 
-    if num_points < PNP_SAMPLE_SIZE:
+    if num_points < config.PNP_SAMPLE_SIZE:
         return None, None
 
-    if not 0.0 < confidence < 1.0:
+    if not 0.0 < config.RANSAC_CONFIDENCE < 1.0:
         raise ValueError("confidence must lie in the interval (0, 1).")
 
-    if max_iterations <= 0:
+    if config.MAX_RANSAC_ITERATIONS <= 0:
         raise ValueError("max_iterations must be positive.")
 
-    if supporter_threshold_pixels <= 0:
-        raise ValueError("supporter_threshold_pixels must be positive.")
+    if max_translation_m <= 0:
+        raise ValueError("max_translation_m must be positive.")
 
-    if max_translation <= 0:
-        raise ValueError("max_translation must be positive.")
-
-    if min_inliers < PNP_SAMPLE_SIZE:
-        raise ValueError(f"min_inliers must be at least {PNP_SAMPLE_SIZE}.")
+    if min_inliers < config.PNP_SAMPLE_SIZE:
+        raise ValueError(f"min_inliers must be at least {config.PNP_SAMPLE_SIZE}.")
 
     correspondence_arrays = (left0, right0, left1, right1)
     if any(len(points) != num_points for points in correspondence_arrays):
@@ -126,13 +117,13 @@ def ransac_pnp(
     best_mask: np.ndarray | None = None
     max_supporters = 0
 
-    current_max_iterations = max_iterations
+    current_max_iterations = config.MAX_RANSAC_ITERATIONS
     iteration = 0
 
     while iteration < current_max_iterations:
         sample_indices = rng.choice(
             num_points,
-            size=PNP_SAMPLE_SIZE,
+            size=config.PNP_SAMPLE_SIZE,
             replace=False,
         )
 
@@ -146,7 +137,7 @@ def ransac_pnp(
         if candidate_transform is not None:
             translation_norm = np.linalg.norm(candidate_transform[:3, 3])
 
-            if translation_norm < max_translation:
+            if translation_norm < max_translation_m:
                 supporter_mask, _ = count_supporters(
                     transform_left0_to_left1=candidate_transform,
                     points_3d_left0=points_3d,
@@ -170,8 +161,8 @@ def ransac_pnp(
                     inlier_ratio = supporter_count / num_points
                     required_iterations = _required_ransac_iterations(
                         inlier_ratio=inlier_ratio,
-                        confidence=confidence,
-                        sample_size=PNP_SAMPLE_SIZE,
+                        confidence=config.RANSAC_CONFIDENCE,
+                        sample_size=config.PNP_SAMPLE_SIZE,
                     )
 
                     current_max_iterations = min(
@@ -197,7 +188,7 @@ def ransac_pnp(
     if refined_transform is not None:
         translation_norm = np.linalg.norm(refined_transform[:3, 3])
 
-        if translation_norm < max_translation:
+        if translation_norm < max_translation_m:
             refined_mask, _ = count_supporters(
                 transform_left0_to_left1=refined_transform,
                 points_3d_left0=points_3d,

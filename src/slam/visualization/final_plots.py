@@ -1,7 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from src.slam.visualization.ex7_plots import positions_from_world_to_camera_extrinsics
+def positions_from_world_to_camera_extrinsics(extrinsics_list, frame_ids):
+    positions = []
+    for i in frame_ids:
+        T = extrinsics_list[i]
+        R = T[:3, :3]
+        t = T[:3, 3]
+        positions.append(-R.T @ t)
+    return np.asarray(positions)
 import gtsam
 
 def plot_optimization_median_projection_error(

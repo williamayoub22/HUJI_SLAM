@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-SUPPORTER_THRESHOLD_PIXELS = 2.0
+from .. import config
 
 
 @dataclass(frozen=True)
@@ -142,7 +142,7 @@ def count_supporters(
     intrinsic_matrix: np.ndarray,
     left_projection_matrix: np.ndarray,
     right_projection_matrix: np.ndarray,
-    threshold_pixels: float = SUPPORTER_THRESHOLD_PIXELS,
+    threshold_pixels: float = config.SUPPORTER_THRESHOLD_PIXELS,
 ) -> tuple[np.ndarray, FourViewReprojectionErrors]:
     """Return correspondences consistent with a four-view reprojection threshold.
 

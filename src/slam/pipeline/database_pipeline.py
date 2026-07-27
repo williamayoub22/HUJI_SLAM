@@ -13,7 +13,7 @@ from ..geometry.ransac import ransac_pnp
 from ..geometry.triangulation import triangulate_opencv
 from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import read_images
-from ..pipeline.stereo_pipeline import DEVIATION_THRESHOLD
+from .. import config
 from src.slam.database.tracking_database import Link, TrackingDB
 
 
@@ -69,7 +69,7 @@ def _compute_stereo_inlier_mask(
         y_right = kp_right[match.trainIdx].pt[1]
 
         valid_y = abs(y_left - y_right) <= deviation_threshold
-        valid_x = (x_left - x_right) > 0.5  # Positive disparity check
+        valid_x = (x_left - x_right) > config.MIN_DISPARITY  # Positive disparity check
 
         inliers.append(valid_y and valid_x)
 
@@ -78,10 +78,6 @@ def _compute_stereo_inlier_mask(
 
 def _create_frame_data(
     frame_idx: int,
-    feature_type: FeatureType,
-    num_features: int,
-    ratio_threshold: float,
-    deviation_threshold: float,
     P1: np.ndarray,
     P2: np.ndarray,
 ) -> DatabaseFrameData:
@@ -94,13 +90,13 @@ def _create_frame_data(
 
     kp_left, des_left = extract_features(
         left_img,
-        feature_type=feature_type,
-        num_features=num_features,
+        feature_type=config.FEATURE_TYPE,
+        num_features=config.NUM_FEATURES,
     )
     kp_right, des_right = extract_features(
         right_img,
-        feature_type=feature_type,
-        num_features=num_features,
+        feature_type=config.FEATURE_TYPE,
+        num_features=config.NUM_FEATURES,
     )
 
     if des_left is None or des_right is None:
@@ -114,8 +110,8 @@ def _create_frame_data(
     stereo_matches = match_and_filter(
         des_left,
         des_right,
-        feature_type=feature_type,
-        ratio=ratio_threshold,
+        feature_type=config.FEATURE_TYPE,
+        ratio=config.RATIO_THRESHOLD,
     )
 
     if len(stereo_matches) == 0:
@@ -129,7 +125,7 @@ def _create_frame_data(
         kp_left=kp_left,
         kp_right=kp_right,
         matches=stereo_matches,
-        deviation_threshold=deviation_threshold,
+        deviation_threshold=config.DEVIATION_THRESHOLD,
     )
 
     left_features, links = TrackingDB.create_links(
@@ -160,11 +156,10 @@ def _create_frame_data(
 def _match_temporal_features(
     prev_frame: DatabaseFrameData,
     cur_frame: DatabaseFrameData,
-    feature_type: FeatureType,
     K: np.ndarray,
     P1: np.ndarray,
     P2: np.ndarray,
-    max_depth: float = 300.0,
+    max_depth: float = config.MAX_DEPTH,
 ) -> tuple[list[cv2.DMatch], list[bool]]:
     """Match descriptors from the previous left frame to the current left frame.
 
@@ -187,7 +182,7 @@ def _match_temporal_features(
     if cur_left_features is None or len(cur_left_features) == 0:
         return _make_invalid_temporal_matches(num_prev_features)
 
-    norm_type = cv2.NORM_HAMMING if feature_type in ("orb", "akaze") else cv2.NORM_L2
+    norm_type = cv2.NORM_HAMMING if config.FEATURE_TYPE in ("orb", "akaze") else cv2.NORM_L2
 
     matcher = cv2.BFMatcher(norm_type, crossCheck=False)
     raw_matches = matcher.match(prev_left_features, cur_left_features)
@@ -299,10 +294,6 @@ def load_tracking_database(base_filename: str | Path) -> TrackingDB:
 def build_tracking_database(
     sequence_dir: Path,
     num_frames: int | None = None,
-    feature_type: FeatureType = "akaze",
-    num_features: int = 3000,
-    ratio_threshold: float = 0.6,
-    deviation_threshold: float = DEVIATION_THRESHOLD,
 ) -> tuple[TrackingDB, list[float]]:
     """Build a TrackingDB over a sequence of stereo frames.
 
@@ -324,10 +315,6 @@ def build_tracking_database(
     for frame_idx in tqdm(range(num_frames), desc="Building tracking database"):
         cur_frame_data = _create_frame_data(
             frame_idx=frame_idx,
-            feature_type=feature_type,
-            num_features=num_features,
-            ratio_threshold=ratio_threshold,
-            deviation_threshold=deviation_threshold,
             P1=P1,
             P2=P2,
         )
@@ -341,7 +328,6 @@ def build_tracking_database(
             temporal_matches, temporal_inliers = _match_temporal_features(
                 prev_frame=prev_frame_data,
                 cur_frame=cur_frame_data,
-                feature_type=feature_type,
                 K=K,
                 P1=P1,
                 P2=P2,

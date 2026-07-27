@@ -9,14 +9,13 @@ from src.slam.database.facade import SlamDatabase
 from .optimization import optimize_bundle_window
 from .results import BundleWindowSolution
 from .window_selection import bundle_windows_from_keyframes
+from .. import config
 
 
 def solve_all_bundle_windows(
     slam_db: SlamDatabase,
     calibration: gtsam.Cal3_S2Stereo,
     keyframes: list[int],
-    min_track_observations: int = 2,
-    measurement_sigma_pixels: float = 1.0,
     verbose: bool = False,
 ) -> list[BundleWindowSolution]:
     """Solve one independent local BA problem for each adjacent keyframe pair.
@@ -60,8 +59,8 @@ def solve_all_bundle_windows(
             slam_db=slam_db,
             calibration=calibration,
             window_frames=window_frames,
-            min_track_observations=min_track_observations,
-            measurement_sigma_pixels=measurement_sigma_pixels,
+            min_track_observations=config.MIN_TRACK_OBSERVATIONS,
+            measurement_sigma_pixels=config.MEASUREMENT_SIGMA_PIXELS,
         )
 
         elapsed_seconds = perf_counter() - start_time

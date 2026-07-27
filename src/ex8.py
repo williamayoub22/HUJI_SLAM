@@ -16,6 +16,7 @@ from src.slam.ba.optimization import _validate_graph_keys
 from src.slam.ba.results import BundleAdjustmentResult, ProjectionFactorMetadata, BundleWindowSolution
 from src.slam.ba.window_selection import collect_window_tracks, bundle_windows_from_keyframes, choose_keyframes_by_motion
 from src.slam.config import SEQUENCE_DIR, CACHE_DIR, GT_POSES_PATH, GLOBAL_CAMERA_MATRICES_PATH
+from src.slam import config
 from src.slam.database.facade import SlamDatabase
 from src.slam.features.detectors import extract_features
 from src.slam.features.matching import match_and_filter, get_matched_points
@@ -29,11 +30,8 @@ from src.slam.loop_closure.candidate_detection import ConsensusMatcher, Consensu
 from src.slam.pose_graph.constraints import extract_relative_pose_constraint
 from src.slam.pose_graph.graph_builder import build_pose_graph
 from src.slam.pose_graph.optimization import optimize_pose_graph
-from src.slam.visualization.ex7_plots import plot_absolute_location_error, plot_consensus_match, plot_location_uncertainty, plot_pose_graph_comparisons, plot_pose_graphs_versions, positions_from_values
-MAHALANOBIS_THRESHOLD = 32023.8
-NUM_LOOP_CLOSURE_REPRESENTATIVES = 10
-MIN_REPRESENTATIVE_LOOP_INLIERS = 30
-MAX_REFINED_COVARIANCE_CONDITION = 100000000.0
+
+
 from src.slam.pipeline.pose_graph_pipeline import solve_bundle_windows_and_extract_constraints
 
 def build_database():
@@ -54,11 +52,11 @@ def build_database():
     slam_db.manager_poses.add_pose(0, global_T)
     global_camera_matrices = [global_T[:3, :].copy()]
     inlier_percentages = []
-    prev_frame_data = _create_frame_data(frame_idx=0, feature_type='akaze', num_features=3000, ratio_threshold=0.85, deviation_threshold=2.0, P1=P1, P2=P2)
+    prev_frame_data = _create_frame_data(frame_idx=0, P1=P1, P2=P2)
     slam_db.manager_2d.add_frame(links=prev_frame_data.links, left_features=prev_frame_data.left_features)
     for frame_idx in tqdm(range(1, total_frames), desc='Building SLAM Database'):
-        cur_frame_data = _create_frame_data(frame_idx=frame_idx, feature_type='akaze', num_features=3000, ratio_threshold=0.85, deviation_threshold=2.0, P1=P1, P2=P2)
-        temporal_matches, temporal_inliers = _match_temporal_features(prev_frame=prev_frame_data, cur_frame=cur_frame_data, feature_type='akaze', K=K, P1=P1, P2=P2)
+        cur_frame_data = _create_frame_data(frame_idx=frame_idx, P1=P1, P2=P2)
+        temporal_matches, temporal_inliers = _match_temporal_features(prev_frame=prev_frame_data, cur_frame=cur_frame_data, K=K, P1=P1, P2=P2)
         inlier_ratio = sum(temporal_inliers) / len(temporal_matches) if len(temporal_matches) > 0 else 0.0
         inlier_percentages.append(inlier_ratio)
         candidate_prev_3d = []
@@ -303,7 +301,7 @@ def prepare_bundle_adjustment_analysis(database) -> BundleAnalysisContext:
     print(f'Selected {len(keyframes)} motion-based keyframes.')
     print(f'First keyframes: {keyframes[:10]}')
     print(f'Last keyframes:  {keyframes[-10:]}')
-    solutions = solve_all_bundle_windows(slam_db=database, calibration=calibration, keyframes=keyframes, min_track_observations=2, measurement_sigma_pixels=1.0, verbose=True)
+    solutions = solve_all_bundle_windows(slam_db=database, calibration=calibration, keyframes=keyframes, verbose=True)
     return BundleAnalysisContext(calibration=calibration, keyframes=keyframes, solutions=solutions)
 
 def pose3_camera_to_world_to_extrinsic(pose):
@@ -454,9 +452,11 @@ def optimize_track_landmark(manager_2d, track_id, frame_ids, world_to_camera_by_
 def load_or_build_inlier_percentages():
     import numpy as np
     from src.slam.config import PROJECT_DIR
+    import src.slam.config as config
     inlier_path = PROJECT_DIR / "outputs" / "ex4" / "inlier_percentages.npy"
     if not inlier_path.exists():
-        return np.ones(3300) * 100.0
+        total_frames = len(list((config.SEQUENCE_DIR / 'image_0').glob('*.png')))
+        return np.ones(total_frames) * config.MAX_PROJECTION_ERROR_DEFAULT
     return np.load(inlier_path)
 
 def load_or_build_pose_graph_no_lc():
@@ -541,7 +541,7 @@ def load_or_build_pose_graph_with_lc():
     keyframe_ids = pg_no_lc["keyframe_ids"]
     versions_data = []
     for title, values, marginals in versions:
-        positions = positions_from_values(values, keyframe_ids)
+        positions = np.array([values.atPose3(C(frame_id)).translation() for frame_id in keyframe_ids if values.exists(C(frame_id))])
         covs = {}
         if marginals is not None:
             for fid in keyframe_ids:
@@ -598,7 +598,7 @@ def _build_pg_no_lc():
     at least 90% of temporally nonlocal pairs within 5 m and 20 degrees,
     while keeping the number of consensus-matching attempts small.
     """
-    min_keyframe_separation = 5
+
     keyframe_step = 10
 
     slam_db, calibration = build_database()
@@ -642,7 +642,6 @@ def _build_pg_no_lc():
                 covariance_graph=build_result.covariance_graph,
                 keyframe_ids=keyframe_ids,
                 target_frame=target_frame,
-                min_keyframe_separation=min_keyframe_separation,
             )
         )
 
@@ -660,8 +659,8 @@ def _build_pg_no_lc():
     print("=" * 60)
     print("Keyframe selection:           motion-based")
     print(f"Keyframes tested:             {len(keyframe_ids)}")
-    print(f"Minimum temporal separation:  {min_keyframe_separation}")
-    print(f"Mahalanobis threshold:        {MAHALANOBIS_THRESHOLD:.1f}")
+    print(f"Minimum temporal separation:  {config.MIN_KEYFRAME_SEPARATION}")
+    print(f"Mahalanobis threshold:        {config.MAHALANOBIS_THRESHOLD:.1f}")
     print(
         "Threshold rationale:          smallest empirical threshold "
         "with at least 90% proxy-close-pair recall"
@@ -677,8 +676,7 @@ def _build_pg_no_lc():
             covariance_graph=build_result.covariance_graph,
             keyframe_ids=keyframe_ids,
             target_frame=target_frame,
-            min_keyframe_separation=min_keyframe_separation,
-            mahalanobis_threshold=MAHALANOBIS_THRESHOLD,
+            mahalanobis_threshold=config.MAHALANOBIS_THRESHOLD,
         )
 
         if candidates:
@@ -737,10 +735,7 @@ def _build_lc_candidates(
     """
     min_loop_inliers = 20
 
-    matcher = ConsensusMatcher(
-        feature_type="akaze",
-        min_loop_inliers=min_loop_inliers,
-    )
+    matcher = ConsensusMatcher()
 
     candidates = sorted(
         (
@@ -785,12 +780,11 @@ def _build_lc_candidates(
     robust_results = [
         result
         for result in verified_results
-        if result.num_inliers >= MIN_REPRESENTATIVE_LOOP_INLIERS
+        if result.num_inliers >= config.MIN_REPRESENTATIVE_LOOP_INLIERS
     ]
 
     selected_results = select_spread_loop_closures(
-        robust_results,
-        num_representatives=NUM_LOOP_CLOSURE_REPRESENTATIVES,
+        robust_results
     )
 
     print("\n" + "=" * 60)
@@ -801,7 +795,7 @@ def _build_lc_candidates(
     print(
         "Robust loop closures:           "
         f"{len(robust_results)} "
-        f"(inliers >= {MIN_REPRESENTATIVE_LOOP_INLIERS})"
+        f"(inliers >= {config.MIN_REPRESENTATIVE_LOOP_INLIERS})"
     )
     print(f"Selected for BA refinement:     {len(selected_results)}")
 
@@ -823,9 +817,9 @@ def _refine_lc(
     """Section 7.3: refine the selected consensus matches using two-frame stereo BA
     and extract a relative-pose covariance for each loop constraint.
     """
-    print("\n" + "=" * 60)
+    print("\n" + '=' * 60)
     print("[7.3] Relative Pose Estimation")
-    print("=" * 60)
+    print('=' * 60)
     print(f"Selected loop closures refined: {len(selected_results)}")
     print(
         "Initialization:                source pose fixed at identity; "
@@ -857,11 +851,11 @@ def _refine_lc(
         print(f"  Relative-pose std:       {np.array2string(covariance_std, precision=5)}")
         print(f"  Covariance condition:    {covariance_condition:.2e}")
 
-        if covariance_condition > MAX_REFINED_COVARIANCE_CONDITION:
+        if covariance_condition > config.MAX_REFINED_COVARIANCE_CONDITION:
             print(
                 "  Result: rejected refined loop closure — "
                 f"covariance condition {covariance_condition:.2e} "
-                f"> {MAX_REFINED_COVARIANCE_CONDITION:.1e}"
+                f"> {config.MAX_REFINED_COVARIANCE_CONDITION:.1e}"
             )
             continue
 
@@ -879,9 +873,9 @@ def _build_pg_with_lc(
     """Section 7.4: Add the resulting measurement to the pose graph and optimize it to update the trajectory estimate.
     We incrementally add loop closures and optimize to collect intermediate versions for q_5.
     """
-    print("\n" + "=" * 60)
+    print("\n" + '=' * 60)
     print("[7.4] Update the Pose Graph")
-    print("=" * 60)
+    print('=' * 60)
 
     updated_graph = graph.clone()
     current_estimates = initial_estimates
@@ -955,11 +949,7 @@ def _print_mahalanobis_threshold_sweep(
     close_candidates = [
         candidate
         for candidate in all_candidates
-        if _is_geometrically_close(
-            candidate,
-            max_translation_m=max_translation_m,
-            max_rotation_deg=max_rotation_deg,
-        )
+        if _is_geometrically_close(candidate)
     ]
 
     if not close_candidates:
@@ -973,9 +963,9 @@ def _print_mahalanobis_threshold_sweep(
         dtype=float,
     )
 
-    print("\n" + "=" * 60)
+    print("\n" + '=' * 60)
     print("Empirical Mahalanobis-threshold calibration")
-    print("=" * 60)
+    print('=' * 60)
     print(
         "Calibration close-pair proxy: "
         f"translation <= {max_translation_m:.1f} m, "
@@ -1001,11 +991,7 @@ def _print_mahalanobis_threshold_sweep(
         selected_close = [
             candidate
             for candidate in selected
-            if _is_geometrically_close(
-                candidate,
-                max_translation_m=max_translation_m,
-                max_rotation_deg=max_rotation_deg,
-            )
+            if _is_geometrically_close(candidate)
         ]
 
         recall = len(selected_close) / len(close_candidates)
@@ -1052,18 +1038,15 @@ def _show_candidate_pair(
     source_position = optimized_values.atPose3(C(source_frame)).translation()
     target_position = optimized_values.atPose3(C(target_frame)).translation()
 
-    positions = np.asarray(
-        [optimized_values.atPose3(C(frame_id)).translation() for frame_id in keyframe_ids],
-        dtype=float,
-    )
+    positions = np.array([optimized_values.atPose3(C(frame_id)).translation() for frame_id in keyframe_ids if optimized_values.exists(C(frame_id))])
 
     delta = np.asarray(candidate.relative_delta, dtype=float)
     translation_m = float(np.linalg.norm(delta[3:]))
     rotation_deg = float(np.degrees(np.linalg.norm(delta[:3])))
 
-    print("\n" + "=" * 60)
+    print("\n" + '=' * 60)
     print(title_prefix)
-    print("=" * 60)
+    print('=' * 60)
     print(f"Frames:                 c_{source_frame} <-> c_{target_frame}")
     print(f"Mahalanobis d^2:         {candidate.mahalanobis_squared:.1f}")
     print(f"Euclidean distance:       {translation_m:.3f} m")
@@ -1113,9 +1096,6 @@ def _show_candidate_pair(
 
 def _is_geometrically_close(
         candidate,
-        *,
-        max_translation_m: float,
-        max_rotation_deg: float,
 ) -> bool:
     """Offline calibration label only; never used as the actual online gate."""
     delta = np.asarray(candidate.relative_delta, dtype=float)
@@ -1123,7 +1103,7 @@ def _is_geometrically_close(
     translation_m = float(np.linalg.norm(delta[3:]))
     rotation_deg = float(np.degrees(np.linalg.norm(delta[:3])))
 
-    return translation_m <= max_translation_m and rotation_deg <= max_rotation_deg
+    return translation_m <= config.MAX_TRANSLATION_M and rotation_deg <= config.MAX_ROTATION_DEG
 
 def _closest_spatial_candidate(candidates_by_target: dict[int, list]):
     """Return the temporally nonlocal candidate with the smallest Euclidean

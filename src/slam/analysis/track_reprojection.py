@@ -13,6 +13,7 @@ from src.slam.ba.gtsam_utils import (
     stereo_residual_norm,
 )
 from src.slam.tracking_database import TrackingDB
+from .. import config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,8 +41,6 @@ class TrackReprojectionResult:
 
 def choose_track_with_min_length(
     db: TrackingDB,
-    min_length: int = 10,
-    seed: int = 0,
 ) -> int:
     """Select a reproducible random track with at least ``min_length`` frames.
 
@@ -57,15 +56,15 @@ def choose_track_with_min_length(
         ValueError: If ``min_length`` is less than one.
         RuntimeError: If no track satisfies the length requirement.
     """
-    if min_length < 1:
+    if config.MIN_TRACK_LENGTH < 1:
         raise ValueError("min_length must be positive.")
 
-    candidate_tracks = db.tracks_with_min_length(min_length)
+    candidate_tracks = db.tracks_with_min_length(config.MIN_TRACK_LENGTH)
 
     if not candidate_tracks:
-        raise RuntimeError(f"No tracks with length >= {min_length} were found.")
+        raise RuntimeError(f"No tracks with length >= {config.MIN_TRACK_LENGTH} were found.")
 
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(config.RANDOM_SEED)
     return int(rng.choice(candidate_tracks))
 
 
@@ -190,9 +189,6 @@ def analyze_track_reprojection(
     db: TrackingDB,
     world_to_camera_extrinsics: np.ndarray,
     calibration: gtsam.Cal3_S2Stereo,
-    min_track_length: int = 10,
-    seed: int = 0,
-    sigma_pixels: float = 1.0,
 ) -> TrackReprojectionResult:
     """Analyze reprojection and factor errors for one reproducibly selected track.
 
@@ -212,8 +208,6 @@ def analyze_track_reprojection(
     """
     track_id = choose_track_with_min_length(
         db=db,
-        min_length=min_track_length,
-        seed=seed,
     )
 
     frame_ids = list(db.frames(track_id))
@@ -245,7 +239,7 @@ def analyze_track_reprojection(
         landmark_world=landmark_world,
         track_id=track_id,
         calibration=calibration,
-        sigma_pixels=sigma_pixels,
+        sigma_pixels=config.MEASUREMENT_SIGMA_PIXELS,
     )
 
     return TrackReprojectionResult(

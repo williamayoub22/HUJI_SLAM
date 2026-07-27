@@ -20,6 +20,8 @@
 
 import gtsam
 import numpy as np
+
+from .. import config
 from gtsam.symbol_shorthand import C, Q
 from src.slam.database.facade import SlamDatabase
 
@@ -41,7 +43,7 @@ def build_local_bundle_graph(
     calibration: gtsam.Cal3_S2Stereo,
     window_frames: list[int],
     min_track_observations: int = 2,
-    measurement_sigma_pixels: float = 1.0,
+    measurement_sigma_pixels: float = config.MEASUREMENT_SIGMA_PIXELS,
 ) -> tuple[
     gtsam.NonlinearFactorGraph,
     gtsam.Values,

@@ -2,6 +2,8 @@
 
 import gtsam
 import numpy as np
+
+from .. import config
 from src.slam.ba.graph_builder import build_local_bundle_graph
 from src.slam.ba.results import BundleAdjustmentResult
 from src.slam.database.facade import SlamDatabase
@@ -56,7 +58,7 @@ def optimize_bundle_window(
     calibration: gtsam.Cal3_S2Stereo,
     window_frames: list[int],
     min_track_observations: int = 2,
-    measurement_sigma_pixels: float = 1.0,
+    measurement_sigma_pixels: float = config.MEASUREMENT_SIGMA_PIXELS,
 ) -> BundleAdjustmentResult:
     """Build and optimize one local stereo bundle-adjustment window.
 

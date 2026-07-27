@@ -12,17 +12,13 @@ from ..geometry.transforms import to_homogeneous_transform
 from ..io.calibration import read_stereo_calibration
 from ..io.image_loader import read_images
 from ..pipeline.stereo_pipeline import create_stereo_point_cloud
+from .. import config
 
 
 def track_sequence(
     sequence_dir: Path,
     num_frames: int | None = None,
-    feature_type: FeatureType = "akaze",
-    num_features: int = 3000,
-    use_ratio_test: bool = True,
-    ratio_threshold: float = 0.6,
-    deviation_threshold: float = 2.0,
-    max_depth: float = 300.0,
+    max_depth: float = config.MAX_DEPTH,
 ) -> tuple[np.ndarray, list[np.ndarray], float]:
     """Tracks the left camera through the sequence.
 
@@ -48,31 +44,31 @@ def track_sequence(
 
     pc_prev = create_stereo_point_cloud(
         0,
-        threshold=deviation_threshold,
+        threshold=config.DEVIATION_THRESHOLD,
         reject_negative_depth=True,
         max_depth=max_depth,
-        feature_type=feature_type,
-        num_features=num_features,
-        use_ratio_test=use_ratio_test,
+        feature_type=config.FEATURE_TYPE,
+        num_features=config.NUM_FEATURES,
+        use_ratio_test=True,
     )
 
     img_prev, _ = read_images(0)
-    kp_prev, des_prev = extract_features(img_prev, feature_type, num_features)
+    kp_prev, des_prev = extract_features(img_prev, config.FEATURE_TYPE, config.NUM_FEATURES)
 
     for frame_idx in tqdm(range(num_frames - 1), desc="Tracking frames"):
         curr_idx = frame_idx + 1
 
         img_curr, _ = read_images(curr_idx)
-        kp_curr, des_curr = extract_features(img_curr, feature_type, num_features)
+        kp_curr, des_curr = extract_features(img_curr, config.FEATURE_TYPE, config.NUM_FEATURES)
 
         pc_curr = create_stereo_point_cloud(
             curr_idx,
-            threshold=deviation_threshold,
+            threshold=config.DEVIATION_THRESHOLD,
             reject_negative_depth=True,
             max_depth=max_depth,
-            feature_type=feature_type,
-            num_features=num_features,
-            use_ratio_test=use_ratio_test,
+            feature_type=config.FEATURE_TYPE,
+            num_features=config.NUM_FEATURES,
+            use_ratio_test=True,
         )
 
         if des_prev is None or des_curr is None:
@@ -81,8 +77,8 @@ def track_sequence(
             matches = match_and_filter(
                 des_prev,
                 des_curr,
-                feature_type=feature_type,
-                ratio=ratio_threshold,
+                feature_type=config.FEATURE_TYPE,
+                ratio=config.RATIO_THRESHOLD,
             )
 
             if len(matches) < 4:

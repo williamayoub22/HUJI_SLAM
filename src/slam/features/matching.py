@@ -8,7 +8,7 @@ import numpy as np
 from .detectors import FeatureType, extract_features, normalize_feature_type
 
 KNN_NEIGHBORS = 2
-RATIO_THRESHOLD = 0.75
+from .. import config
 
 
 def create_matcher(
@@ -60,7 +60,7 @@ def match_features(
 
 def filter_matches_ratio(
     knn_matches: Sequence[Sequence[cv2.DMatch]],
-    ratio: float = RATIO_THRESHOLD,
+    ratio: float = config.RATIO_THRESHOLD,
 ) -> tuple[list[cv2.DMatch], list[cv2.DMatch]]:
     """Filter two-neighbor matches using Lowe's ratio test.
 
@@ -98,7 +98,7 @@ def match_and_filter(
     descriptors1: np.ndarray,
     descriptors2: np.ndarray,
     feature_type: FeatureType = "sift",
-    ratio: float = RATIO_THRESHOLD,
+    ratio: float = config.RATIO_THRESHOLD,
 ) -> list[cv2.DMatch]:
     """Match descriptors and retain only matches passing Lowe's ratio test."""
     knn_matches = match_features(
@@ -148,7 +148,7 @@ def extract_and_match_features(
     image2: np.ndarray,
     feature_type: FeatureType = "sift",
     num_features: int | None = None,
-    ratio_threshold: float = RATIO_THRESHOLD,
+    ratio_threshold: float = config.STEREO_RATIO_THRESHOLD,
     use_ratio_test: bool = False,
 ) -> tuple[list[cv2.KeyPoint], list[cv2.KeyPoint], list[cv2.DMatch]]:
     """Extract features from two images and compute descriptor correspondences.

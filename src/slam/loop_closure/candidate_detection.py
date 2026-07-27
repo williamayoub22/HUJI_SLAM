@@ -16,6 +16,7 @@ from src.slam.pose_graph.covariance_routing import (
     CovarianceGraph,
     mahalanobis_squared,
 )
+from .. import config
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,6 @@ def score_candidates_for_keyframe(
     covariance_graph: CovarianceGraph,
     keyframe_ids: list[int],
     target_frame: int,
-    min_keyframe_separation: int = 5,
 ) -> list[LoopClosureCandidate]:
     """Score every temporally nonlocal earlier keyframe.
 
@@ -62,11 +62,11 @@ def score_candidates_for_keyframe(
     if target_frame not in keyframe_ids:
         raise ValueError(f"Target frame {target_frame} is not a pose-graph keyframe.")
 
-    if min_keyframe_separation < 1:
+    if config.MIN_KEYFRAME_SEPARATION < 1:
         raise ValueError("min_keyframe_separation must be at least 1.")
 
     target_index = keyframe_ids.index(target_frame)
-    last_source_index = target_index - min_keyframe_separation
+    last_source_index = target_index - config.MIN_KEYFRAME_SEPARATION
 
     if last_source_index < 0:
         return []
@@ -124,7 +124,6 @@ def detect_candidates_for_keyframe(
     covariance_graph: CovarianceGraph,
     keyframe_ids: list[int],
     target_frame: int,
-    min_keyframe_separation: int = 5,
     mahalanobis_threshold: float,
     max_candidates: int | None = None,
 ) -> list[LoopClosureCandidate]:
@@ -140,7 +139,6 @@ def detect_candidates_for_keyframe(
         covariance_graph=covariance_graph,
         keyframe_ids=keyframe_ids,
         target_frame=target_frame,
-        min_keyframe_separation=min_keyframe_separation,
     )
 
     accepted = [
@@ -190,7 +188,6 @@ def suppress_nearby_candidate_pairs(
     return selected
 
 
-from src.slam.features.detectors import DEFAULT_ORB_NUM_FEATURES, FeatureType
 from src.slam.geometry.correspondences import find_common_points
 from src.slam.geometry.pnp import solve_pnp_safe
 from src.slam.geometry.ransac import ransac_pnp
@@ -201,8 +198,7 @@ from src.slam.pipeline.stereo_pipeline import (
 )
 from src.slam.pipeline.temporal_pipeline import match_left_frames
 
-MIN_LOOP_FOUR_VIEW_MATCHES = 20
-MIN_LOOP_INLIERS = 20
+from src.slam.pipeline.temporal_pipeline import match_left_frames
 
 
 @dataclass(frozen=True)
@@ -237,15 +233,10 @@ class ConsensusMatcher:
 
     def __init__(
         self,
-        *,
-        feature_type: FeatureType = "akaze",
-        min_loop_inliers: int = MIN_LOOP_INLIERS,
     ) -> None:
-        if min_loop_inliers < 4:
+        if config.MIN_LOOP_INLIERS < 4:
             raise ValueError("min_loop_inliers must be at least 4.")
 
-        self.feature_type = feature_type
-        self.min_loop_inliers = min_loop_inliers
         self._stereo_cache: dict[int, StereoPointCloud] = {}
 
     def _get_stereo_cloud(self, frame_id: int) -> StereoPointCloud:
@@ -254,9 +245,7 @@ class ConsensusMatcher:
             self._stereo_cache[frame_id] = create_stereo_point_cloud(
                 frame_id,
                 reject_negative_depth=True,
-                feature_type=self.feature_type,
-                num_features=None,
-                use_ratio_test=True,
+                use_custom_triangulation=False,
             )
 
         return self._stereo_cache[frame_id]
@@ -279,9 +268,6 @@ class ConsensusMatcher:
         temporal_data = match_left_frames(
             source_frame,
             target_frame,
-            feature_type=self.feature_type,
-            num_features=DEFAULT_ORB_NUM_FEATURES,
-            use_ratio_test=True,
         )
 
         num_temporal_matches = len(temporal_data.matches)
@@ -301,7 +287,7 @@ class ConsensusMatcher:
 
         num_four_view_matches = len(points_3d)
 
-        if num_four_view_matches < MIN_LOOP_FOUR_VIEW_MATCHES:
+        if num_four_view_matches < config.MIN_LOOP_INLIERS:
             return ConsensusMatchResult(
                 candidate=candidate,
                 num_temporal_matches=num_temporal_matches,
@@ -313,7 +299,7 @@ class ConsensusMatcher:
                 success=False,
                 failure_reason=(
                     "Too few four-view correspondences: "
-                    f"{num_four_view_matches} < {MIN_LOOP_FOUR_VIEW_MATCHES}"
+                    f"{num_four_view_matches} < {config.MIN_LOOP_INLIERS}"
                 ),
             )
 
@@ -348,7 +334,7 @@ class ConsensusMatcher:
         num_inliers = int(np.sum(inlier_mask))
         inlier_ratio = num_inliers / num_four_view_matches
 
-        if num_inliers < self.min_loop_inliers:
+        if num_inliers < config.MIN_LOOP_INLIERS:
             return ConsensusMatchResult(
                 candidate=candidate,
                 num_temporal_matches=num_temporal_matches,
@@ -358,7 +344,7 @@ class ConsensusMatcher:
                 source_to_target_transform=transform_ransac,
                 inlier_mask=inlier_mask,
                 success=False,
-                failure_reason=(f"Too few RANSAC inliers: {num_inliers} < {self.min_loop_inliers}"),
+                failure_reason=(f"Too few RANSAC inliers: {num_inliers} < {config.MIN_LOOP_INLIERS}"),
             )
 
         transform_refined = solve_pnp_safe(
@@ -388,7 +374,6 @@ class ConsensusMatcher:
         )
 
 
-STEREO_PIXEL_SIGMA = 1.0
 SOURCE_POSE_PRIOR_SIGMA = 1e-9
 
 
@@ -420,8 +405,6 @@ def _stereo_measurement(
 
 def refine_relative_pose_with_bundle_adjustment(
     consensus_result: ConsensusMatchResult,
-    *,
-    pixel_sigma: float = STEREO_PIXEL_SIGMA,
 ) -> RelativePoseEstimate:
     """Refine one verified loop closure with a two-frame stereo bundle adjustment.
 
@@ -502,7 +485,7 @@ def refine_relative_pose_with_bundle_adjustment(
 
     stereo_noise = gtsam.noiseModel.Isotropic.Sigma(
         3,
-        pixel_sigma,
+        config.MEASUREMENT_SIGMA_PIXELS,
     )
 
     for landmark_index, point_3d in enumerate(points_3d):
@@ -589,8 +572,6 @@ def refine_relative_pose_with_bundle_adjustment(
 
 def select_spread_loop_closures(
     verified_results: list[ConsensusMatchResult],
-    *,
-    num_representatives: int = 3,
 ) -> list[ConsensusMatchResult]:
     """Select temporally spread representatives from one loop-overlap band.
 
@@ -606,16 +587,16 @@ def select_spread_loop_closures(
     if not successful:
         return []
 
-    if num_representatives < 1:
+    if config.NUM_LOOP_CLOSURE_REPRESENTATIVES < 1:
         raise ValueError("num_representatives must be positive.")
 
-    if len(successful) <= num_representatives:
+    if len(successful) <= config.NUM_LOOP_CLOSURE_REPRESENTATIVES:
         return successful
 
     selected_indices = np.linspace(
         0,
         len(successful) - 1,
-        num=num_representatives,
+        num=config.NUM_LOOP_CLOSURE_REPRESENTATIVES,
         dtype=int,
     )
 
