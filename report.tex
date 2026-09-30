@@ -1,0 +1,310 @@
+\documentclass[12pt]{article}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage[a4paper, margin=1in]{geometry}
+
+% --- Main Section Formatting ---
+\titleformat{\section}
+  {\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titlespacing*{\section}{0pt}{2\baselineskip}{1\baselineskip}
+
+% --- Subsection Formatting ---
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}
+  {\thesubsection}             
+  {1em}                        
+  {}                           
+
+\titlespacing*{\subsection}
+  {0pt}
+  {1.5\baselineskip}
+  {0.5\baselineskip}
+
+\begin{document}
+\title{SLAM - Final Project}
+\author{Iris Kaplan \& William Ayoub}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\vspace*{1em}
+\noindent
+\textbf{Oral Discussion Scheduling:} \\
+Three Possible Dates for the oral discussion are 16-18.8. \\
+Email addresses for coordination: \\
+\href{mailto:iris.kaplan1@mail.huji.ac.il}{iris.kaplan1@mail.huji.ac.il} \\
+\href{mailto:william.ayoub@mail.huji.ac.il}{william.ayoub@mail.huji.ac.il}
+\vspace*{2em}
+
+
+\section{Introduction and Overview}
+\label{sec:intro}
+Over the semester, we developed and implemented a complete Vision-Aided Navigation and Simultaneous Localization and Mapping (SLAM) library. The primary goal of this project was to estimate the trajectory of a vehicle from a video captured with an onboard stereo camera (KITTI odometry dataset), while simultaneously constructing a 3D map of visual landmarks.
+
+Vision-aided navigation is highly important in robotics and autonomous driving because it provides reliable egomotion estimation and environmental mapping using relatively inexpensive and passive sensors.
+
+The system consists of several robust stages:
+\begin{enumerate}
+    \item \textbf{Feature Detection and Tracking:} Extracting AKAZE features from stereo pairs, matching them, triangulating them to 3D, and tracking them temporally.
+    \item \textbf{Visual Odometry:} Calculating initial relative poses between frames using Perspective-n-Point (PnP) and RANSAC.
+    \item \textbf{Local Bundle Adjustment:} Refining the camera poses and 3D map locally over keyframe windows to minimize reprojection error and extract reliable covariance estimates.
+    \item \textbf{Loop Closure and Global Optimization:} Using the bundle-adjusted trajectory to build a pose graph, detecting loop closures via Mahalanobis-distance filtering and geometric consensus, and optimizing the global pose graph to eliminate accumulated drift.
+\end{enumerate}
+
+\section{Code Organization}
+\label{sec:code}
+
+We implented each logical set of algorithms as sepeate modules and also separated them from the plotting and pipeline. The primary packages include:
+\begin{itemize}
+    \item \textbf{\texttt{data}:} Contains the database structures and abstractions for storing feature tracks, keyframes, and matches.
+    \item \textbf{\texttt{geometry}:} Implements the geometry algorithms, triangulation, PnP pose estimation, and RANSAC outlier rejection.
+    \item \textbf{\texttt{bundle\_adjustment}:} Handles local window management and GTSAM-based local optimization.
+    \item \textbf{\texttt{pose\_graph} \& \texttt{loop\_closure}:} Build the pose graph, propagate uncertainty and verifying loop closures.
+    \item \textbf{\texttt{project\_visualization}:} Python scripts dedicated to extracting metrics from the SLAM pipeline and rendering all the plots seen in this report.
+\end{itemize}
+
+The main file we used to create the plots for this analysis report is \texttt{src/project\_plots.py}. Running this script pulls all the data through the required pipelines and sequentially generates every plot for the final analysis.
+
+All intermediate states (such as the Tracking Database, the local Bundle Adjustment windows, and the global Pose Graph) are serialized and saved inside the \texttt{outputs/cache/} directory. This prevents redundant calculations during iterative development. Once processing is complete, all generated figures and visual results are cleanly exported and stored in the \texttt{outputs/final\_analysis/} folder.
+
+The core implementations of the main stages are located at:
+\begin{itemize}
+    \item \textbf{Triangulation:} \texttt{triangulate\_opencv} in \nolinkurl{src/slam/geometry/triangulation.py} (Line 105).
+    \item \textbf{RanSaC:} \texttt{ransac\_pnp} in \nolinkurl{src/slam/geometry/ransac.py} (Line 46).
+    \item \textbf{PnP trajectory calculation:} Temporal tracking uses PnP within \texttt{build\_database} in \nolinkurl{src/slam/pipeline/database\_pipeline.py} (Line 358).
+    \item \textbf{DataBase definition:} \texttt{SlamDatabase} in \nolinkurl{src/slam/data/db\_facade.py} (Line 27).
+    \item \textbf{Adding a frame to the database:} \texttt{add\_frame} in \nolinkurl{src/slam/data/tracking\_db.py} (Line 304).
+    \item \textbf{Single Bundle creation:} \texttt{optimize\_bundle\_window} in \nolinkurl{src/slam/bundle\_adjustment/optimizer.py} (Line 56).
+    \item \textbf{Relative transformation (and covariance) extraction:} Marginalized covariance is extracted for the pose graph in \texttt{build\_pose\_graph} using the factor's \texttt{covariance} properties inside \nolinkurl{src/slam/pose\_graph/graph\_builder.py} (Line 79).
+    \item \textbf{PoseGraph building:} \texttt{build\_pose\_graph} in \nolinkurl{src/slam/pose\_graph/graph\_builder.py} (Line 23).
+    \item \textbf{Loop closure detection and factor creation:} \texttt{detect\_candidates\_for\_keyframe} in \nolinkurl{src/slam/loop\_closure/candidates.py} (Line 134), and factor creation in \nolinkurl{src/slam/pipeline/pose\_graph\_pipeline.py} (\texttt{\_build\_pg\_with\_lc}, Line 123).
+\end{itemize}
+
+\section{Feature Tracking and Visual Odometry}
+\label{sec:trackAndVO}
+
+This stage estimates the relative motion between consecutive stereo frames and
+constructs the tracking database used throughout the pipeline. Features are
+detected and matched between the left and right images, triangulated into 3D
+landmarks, and then tracked across consecutive frames. Among the tested feature
+detectors, AKAZE provided the best trade-off between runtime and tracking
+quality and is therefore used throughout the project.
+
+The tracked landmarks provide 3D--2D correspondences for estimating the
+relative pose using PnP within a RANSAC framework, together with additional
+geometric filtering for outlier rejection. The resulting poses form the initial
+visual-odometry trajectory. The database stores the feature tracks, image
+observations, triangulated landmarks, and relative poses required by the later
+bundle-adjustment and pose-graph stages.
+
+\subsection{Tracking Performance}
+
+We first share several statistics describing the quality of the tracking
+database in Table~\ref{tab:tracking_stats}. The stats are printed by $\texttt{project\_plots.py}$.
+
+\begin{table}[H]
+    \centering
+    \caption{Tracking database statistics.}
+    \label{tab:tracking_stats}
+    \begin{tabular}{lc}
+        \hline
+        Statistic & Value \\
+        \hline
+        Number of frames & 3300 \\
+        Number of tracks & 364884 \\
+        Mean track length & 4.95 \\
+        Mean frame connectivity & 437.46 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Frame connectivity measures the number of feature tracks that continue from one
+frame to the next. A higher connectivity provides more geometric constraints
+for pose estimation. Our mean frame connectivity is 437.46. We wanted to see that even in the low points we have at least 150-200 tracks passing between 2 frames to ensure we can build the optimization, and indeed this is the case in almost all frames. The frame connectivity is shown in Figure~\ref{fig:tracking_connectivity}. The plot calculates the number of tracks that exist in both frame $i$ and frame $i+1$. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{william_plot/3_connectivity.png}
+    \caption{Frame-to-frame connectivity: number of tracks observed in both frame $i$ and frame $i+1$.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_3\_connectivity.py}}}
+    \label{fig:tracking_connectivity}
+\end{figure}
+
+Figure~\ref{fig:track_histogram} shows a clear decay in track frequency as track length increases. The plot extracts the track lengths of all landmarks and plots their frequencies on a logarithmic scale. The fast decay is expected because camera motion causes features to leave the field of view, become occluded, or undergo appearance changes that make matching less reliable. The strong decay is consistent with a roughly constant per-frame track-loss rate. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/4_track_length_histogram.png}
+    \caption{Histogram of feature-track lengths (log scale).\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_4\_track\_length.py}}}
+    \label{fig:track_histogram}
+\end{figure}
+
+The percentage of RANSAC inliers for each frame transition is shown in Figure~\ref{fig:tracking_matches}. This statistic reflects the geometric consistency of the VO correspondences and highlights frames in which matching becomes less reliable. 
+The mean inlier rate was approximately $65\%$, indicating that most candidate correspondences were consistent with the estimated motion. The mean number of candidate matches per frame transition was approximately $550$.
+
+The matches per frame plot (Figure~\ref{fig:tracking_matches_count}) counts the total number of temporal feature matches established per frame. It shows a dense average of $\approx 547.9$ matches per frame, providing which is positive since we have enough samples for the later bundle adjustment and graph optimizations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/2_inlier_percentage.png}
+    \caption{RANSAC inlier percentage for each frame.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_2\_inlier\_percentage.py}}}
+    \label{fig:tracking_matches}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/1_matches_per_frame.png}
+    \caption{Number of successful temporal matches per frame.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_1\_matches.py}}}
+    \label{fig:tracking_matches_count}
+\end{figure}
+
+\section{Local Bundle Adjustment}
+\label{sec:BA}
+
+Feature tracking and PnP for consecutive stereo frames provide the initial trajectory estimate. To evaluate it, we triangulate each landmark from its last stereo observation, project it into earlier frames using the PnP-estimated camera motion, and measure the stereo reprojection error. Figure~\ref{fig:median_pnp_err} shows the median error as a function of the distance from the triangulation frame. We use the median rather than the mean because it is less sensitive to mismatches and unusually large projection errors. The plot projects triangulated 3D points back onto previous frames using the PnP trajectory and calculates median 2D reprojection error over distance. It illustrates how raw visual odometry drifts significantly, accumulating up to 6 pixels of error as distance increases.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{william_plot/8_pnp_projection_error_vs_distance.png}
+\caption{Median stereo reprojection error of the initial PnP trajectory as a function of the distance from the triangulation frame.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_8\_pnp\_projection.py}}}
+\label{fig:median_pnp_err}
+\end{figure}
+
+\subsection{Keyframe and Window Selection}
+Optimizing the full sequence is expensive, so we divide it into local windows bounded by keyframes. Our initial heuristic used constant frame gaps, which later produced overly confident covariance estimates and reduced the effectiveness of loop closure. We therefore select the next keyframe from a bounded range of approximately 11–20 frames while requiring sufficient camera motion.
+
+\subsection{Bundle Adjustment Performance}
+We evaluate bundle adjustment using the same reprojection-error measure used for PnP, but with the optimized BA poses and landmarks. Figure~\ref{fig:bundle_projection_error} shows that local BA reduces the median projection error significantly compared to raw PnP. The plot projects points using the Bundle-Adjusted trajectory and optimized 3D landmarks, demonstrating that local BA successfully cuts the projection drift in half compared to PnP.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{william_plot/9_bundle_projection_error_vs_distance.png}
+\caption{Median stereo reprojection error after local bundle adjustment as a function of distance.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_9\_bundle\_projection.py}}}
+\label{fig:bundle_projection_error}
+\end{figure}
+
+The median projection error plot shown in \ref{fig:local_ba_median_err} computes the median pixel projection error within each window before and after optimization. It confirms that BA improves the 3D map by driving the median error down to $\approx 0.3-0.5$ pixels. We computed the median again to be less sensitive to loud outliers.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{william_plot/7_median_projection_error.png}
+\caption{Median projection error in each local bundle-adjustment window before and after optimization.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_7\_optimization\_median\_projection.py}}}
+\label{fig:local_ba_median_err}
+\end{figure}
+
+\section{Pose Graph and Loop Closure}
+\label{sec:pose_graph_loop_closure}
+
+The pose graph contains one pose (node) for each keyframe and one relative-pose constraint (edge) between every pair of consecutive keyframes extracted from the local BA windows. Loop-closure candidates are searched between temporally distant keyframes. We filter candidates using a squared Mahalanobis distance based on the propagated uncertainty from the relative covariances. This filtering reduces the number of image pairs that require visual verification. This cheap to run initial filtering enables us to use less matches in the more accurate and expensive checks we do next.
+
+Verified candidates are processed with four-view matching and PnP with RANSAC. Successful matches are refined using two-frame stereo bundle adjustment, and the optimized relative pose and its marginal covariance are then inserted into the pose graph as a new \texttt{BetweenFactorPose3}.
+
+Figure~\ref{fig:lc_inliers} plots the percentage of geometrically verified inliers during candidate loop closure matches. It shows that verified loop closures have very high inlier rates (50\% - 85\%), ensuring no false positives.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{william_plot/16_lc_inliers.png}
+    \caption{Inlier percentage for successful loop closure matches.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_16\_lc\_inliers.py}}}
+    \label{fig:lc_inliers}
+\end{figure}
+
+Figure~\ref{fig:lc_matches} plots the total number of RANSAC matches for accepted loop closures. It validates that loop closures are supported by a large number of feature correspondences (60 - 480).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{william_plot/15_lc_matches.png}
+    \caption{Total number of RANSAC matches for successful loop closure frames.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_15\_lc\_matches.py}}}
+    \label{fig:lc_matches}
+\end{figure}
+
+\section{Overall Performance Analysis}
+
+\subsection{Trajectory Evaluation}
+The final estimated trajectory is composed by mapping all frame poses using the optimized pose graph backbone. Figure~\ref{fig:trajectory} displays a bird's-eye view of the estimated trajectories across the different pipeline stages, overlaid with the ground truth in green. It is evident that the PnP trajectory drifts considerably, Local Bundle Adjustment corrects some scale, but the full Pose Graph with Loop Closures snaps tightly to the ground truth. The trajectory plot shows the 2D bird's-eye view of all three trajectory pipelines against the ground truth, proving that while PnP diverges, Loop Closure snaps the entire Pose Graph trajectory tightly to the ground truth.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/5_trajectory.png}
+    \caption{Bird's eye view of the PnP estimation, Pose Graph without Loop Closure, Pose Graph with Loop Closure, and Ground Truth trajectories.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_5\_trajectory.py}}}
+    \label{fig:trajectory}
+\end{figure}
+
+\subsection{Absolute Location Errors}
+We analyze the absolute translation and rotation errors for the PnP, the intermediate Pose Graph (without loop closures), and the final Pose Graph (with loop closures). Figure~\ref{fig:absolute_pnp} shows the significant drift accumulated by PnP (reaching 40+ meters). Figure~\ref{fig:absolute_pg_no_lc} shows how Bundle Adjustment constrains the drift to roughly 20-30 meters on average. Finally, Figure~\ref{fig:absolute_pg_with_lc} shows how Loop Closures bring the maximum translation error firmly down to under 15 meters across the entire sequence.
+
+% The absolute PnP error plot computes the absolute translation and rotation differences between PnP and Ground Truth, showing unconstrained drift peaking at over 40 meters.
+
+% The absolute PG no-LC error plot computes the absolute error for the Pose Graph without loop closures, demonstrating that BA limits the drift compared to PnP, capping it at $\approx 20-30$ meters.
+
+% The absolute PG with-LC error plot computes the absolute error for the final Loop Closed Pose Graph, showing that loop closures successfully bound the maximum global location error to under 10 meters.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/10_absolute_pnp_error.png}
+    \caption{Absolute estimation error (X, Y, Z, Norm, Angle) for PnP Trajectory.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_10\_absolute\_pnp.py}}}
+    \label{fig:absolute_pnp}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/11_absolute_pose_graph_no_lc_error.png}
+    \caption{Absolute estimation error for Pose Graph without Loop Closures.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_11\_absolute\_pg\_no\_lc.py}}}
+    \label{fig:absolute_pg_no_lc}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/12_absolute_pose_graph_with_lc_error.png}
+    \caption{Absolute estimation error for Pose Graph WITH Loop Closures.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_12\_absolute\_pg\_with\_lc.py}}}
+    \label{fig:absolute_pg_with_lc}
+\end{figure}
+
+\subsection{Relative Pose Error}
+Relative error over sequence sub-sections is shown in \ref{fig:relative_bundle_error} and provides insight into error accumulation per meter traveled, simulating the KITTI benchmark metric. We measured the relative Bundle estimation error over sequence lengths of 100, 400, and 800 frames. We see that as the window is larger the average error is lower, it makes sense since the error directions are independent.
+
+Figure~\ref{fig:relative_error_consecutive} shows that the error between consecutive frames is most of the time small and consistent. This suggests that the local motion estimates produced by PnP and bundle adjustment are similar, while bundle adjustment primarily improves the global trajectory by reducing accumulated drift and preventing the trajectory from gradually deviating over time.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/13_relative_error.png}
+    \caption{Relative Pose Error between consecutive keyframes compared to ground truth (Bundle and PnP).\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_13\_relative\_error.py}}}
+    \label{fig:relative_error_consecutive}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/14_relative_bundle_error_subsections.png}
+    \caption{Relative Bundle Estimation error evaluated over sub-sequence lengths (100, 400, 800).\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_14\_relative\_bundle\_subsections.py}}}
+    \label{fig:relative_bundle_error}
+\end{figure}
+
+\subsection{Uncertainty Estimation}
+
+Uncertainty acts as the guiding heuristic for Mahalanobis-based loop closure filtering. We extracted the marginal covariance sizes ($\log \det(\Sigma_t)$ for location and $\log \det(\Sigma_R)$ for angle) along the trajectory. Figure~\ref{fig:uncertainty} overlays the location uncertainty generated by Bundle Adjustment versus the reduced uncertainty resulting from Pose Graph Loop Closures.
+The points where uncertainty collapses correspond perfectly with the successful loop closure locations (blue dots). We use the determinant as measure since we want to measure the volume of certainty.
+
+%The uncertainty plot extracts the log determinant of the marginal covariance matrices along the pose graph. It visually proves that uncertainty grows boundlessly during exploration but collapses instantaneously when loop closures are applied.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{william_plot/17_uncertainty.png}
+    \caption{Location Uncertainty size along the pose graph, overlaying BA uncertainty vs Loop Closure-adjusted uncertainty.\\ \vspace{0.2em} \small \textit{Generated by \texttt{plot\_17\_uncertainty.py}}}
+    \label{fig:uncertainty}
+\end{figure}
+
+
+\section{Discussion and Conclusions}
+
+In this project, we successfully implemented a robust stereo SLAM pipeline that accurately tracks vehicle motion over long trajectories. We saw how frame-to-frame PnP estimation suffers from compounding drift. By integrating local Bundle Adjustment, we significantly mitigated local projection errors and maintained accurate relative poses. Finally, implementing global loop closure detection through pose graph optimization effectively reduced the global drift issue.
+
+\textbf{Limitations and Weak Points:}
+One unrealistic assumption in our implementation is the static nature of the environment. Our geometric RANSAC filtering assumes rigid scenes, so large dynamic objects (moving cars, pedestrians) could corrupt the PnP estimation if they dominate the inlier set. Additionally, the Mahalanobis threshold for loop closures is currently a calibrated scalar constant. In varied environments, this threshold might need adaptive tuning based on visual similarity scoring, rather than relying solely on geometric uncertainty propagation which can become overconfident.
+
+\textbf{Future Improvements:}
+To improve the system, we would incorporate an appearance-based loop closure detection module (e.g., Bag of Visual Words or a deep learning global descriptor like NetVLAD) instead of relying purely on the pose graph uncertainty. This would allow the system to recover from lost tracking entirely (relocalization) and detect loop closures even when the odometry drift is so severe that the Mahalanobis distance incorrectly rejects the candidate. We could also implement multithreading: running the local visual odometry in real-time while performing the heavy global bundle adjustment asynchronously in the background.
+
+\end{document}
