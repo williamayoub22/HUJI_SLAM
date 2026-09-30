@@ -16,3 +16,21 @@ The system consists of several robust stages:
 2. **Visual Odometry:** Calculating initial relative poses between frames using Perspective-n-Point (PnP) and RANSAC.
 3. **Local Bundle Adjustment:** Refining the camera poses and 3D map locally over keyframe windows to minimize reprojection error and extract reliable covariance estimates.
 4. **Loop Closure and Global Optimization:** Using the bundle-adjusted trajectory to build a pose graph, detecting loop closures via Mahalanobis-distance filtering and geometric consensus, and optimizing the global pose graph to eliminate accumulated drift.
+
+
+---
+
+## 📦 Dataset Download & Setup
+Due to its large size, the dataset of images (extracted video frames) used in this course is published in the repository's **Releases**.
+
+Please extract the ZIP file into a `dataset` folder located next to the `src` folder. After extraction, the directory structure should look like this:
+
+```text
+project/
+├── dataset/
+│   ├── poses/
+│   └── sequences/
+└── src/
+```
+
+Make sure that the `poses` and `sequences` folders are directly inside the `dataset` folder.
