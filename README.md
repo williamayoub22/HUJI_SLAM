@@ -17,6 +17,8 @@ The system consists of several robust stages:
 3. **Local Bundle Adjustment:** Refining the camera poses and 3D map locally over keyframe windows to minimize reprojection error and extract reliable covariance estimates.
 4. **Loop Closure and Global Optimization:** Using the bundle-adjusted trajectory to build a pose graph, detecting loop closures via Mahalanobis-distance filtering and geometric consensus, and optimizing the global pose graph to eliminate accumulated drift.
 
+<img width="1949" height="705" alt="image" src="https://github.com/user-attachments/assets/78375c83-f1ec-4c84-9a35-8c0514492c06" />
+
 
 ---
 
